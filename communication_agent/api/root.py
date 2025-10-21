@@ -9,7 +9,6 @@ from fastapi import Request
 router = APIRouter()
 
 def create_bids(
-    market_config,
     product_tuples,
 ) -> list[dict]:
     # TODO OU
@@ -35,7 +34,7 @@ def some_router_function(request: Request):
     market_message = request.app.state.market_to_llm_queue.get()
 
     if market_message["msg"] == "calculate bids":
-        bids = create_bids(market_config=market_message["market_config"], product_tuples=market_message["product_tuples"])
+        bids = create_bids(product_tuples=market_message["product_tuples"])
         print(f"LLM Bids: {bids}")
         request.app.state.llm_to_market_queue.put({"msg": "calculated bids", "bids": bids})
     elif market_message["msg"] == "market result":
