@@ -8,6 +8,22 @@ from fastapi import Request
 
 router = APIRouter()
 
+def create_bids(
+    market_config,
+    product_tuples,
+) -> list[dict]:
+    # TODO OU
+    # make this more than a placeholder function
+    # use battery utility calculator and LLM
+
+    return [{
+        "start_time": product_tuples[0],
+        "end_time": product_tuples[1],
+        "volume": 0,
+        "price": 0,
+        "c_rate": 1,
+    }]
+
 @router.get("/", response_class=FileResponse)
 def index():
     # Get the path to the static directory relative to this file
@@ -17,6 +33,14 @@ def index():
 @router.get('/get_queue')
 def some_router_function(request: Request):
     market_message = request.app.state.market_to_llm_queue.get()
-    print(f"Comm agent: {market_message=}")
-    request.app.state.llm_to_market_queue.put("is okay market is open i got it!")
-    return market_message
+
+    if market_message["msg"] == "calculate bids":
+        bids = create_bids(market_config=market_message["market_config"], product_tuples=market_message["product_tuples"])
+        print(f"LLM Bids: {bids}")
+        request.app.state.llm_to_market_queue.put({"msg": "calculated bids", "bids": bids})
+    elif market_message["msg"] == "market result":
+        # feed_to_llm()
+        print("Feeding to LLM")
+
+    return 200
+
