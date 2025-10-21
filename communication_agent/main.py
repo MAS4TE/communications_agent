@@ -16,8 +16,8 @@ def run_app(
         endpoint: str = "",
         token: str = "",
         model: str = "",
-        market_to_llm_queue: Queue | None = None,
-        llm_to_market_queue: Queue | None = None,
+        market_to_llm_queue = None,
+        llm_to_market_queue = None,
 ):
     # TODO OPEN UNIVERSITY
     # make those parameters useable
