@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools >= 78.1.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mas4te-communication-agent"
+version = "0.0.1"
+description = "Communication agent for the MAS4TE project"
+authors = [
+    { name = "MAS4TE Developers", email = "komanns@fh-aachen.de"}
+]
+readme = "README.md"
+license = "MIT"
+keywords = ["MAS4TE", "communication", "LLM"]
+
+classifiers=[
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi >=0.119.1",
+    "openai >=2.6.0",
+    "psutil >=7.1.1",
+    "pydantic >=2.12.3",
+    "python-dotenv >=1.1.1",
+    "ollama >=0.6.0",
+]
+
+[project.scripts]
+communication_llm = "communication_agent.main:app"
+
+[tool.setuptools.packages.find]
+include = ["communication_agent*"]
