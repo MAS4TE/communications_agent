@@ -78,7 +78,7 @@ class ChatService:
             str: The assistant's response
         """
         response = self.client.chat(
-            'gemma3:27b',
+            model=model,
             messages=[*self.messages, {'role': 'user', 'content': message}],
         )
 
