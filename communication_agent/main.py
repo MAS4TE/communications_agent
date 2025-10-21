@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from communication_agent.api import api_router
 
 # Create FastAPI app with enhanced documentation
-def run_app():
+def run_app(host="0.0.0.0", port=8080):
     app = FastAPI(
         title="Solar Battery Assistant API",
         description="API for monitoring and interacting with a solar battery system, including both direct data access and a conversational assistant interface.",
@@ -33,7 +33,7 @@ def run_app():
     # Include API routes
     app.include_router(api_router)
 
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    uvicorn.run(app, host=host, port=port)
 
 
 if __name__ == "__main__":
