@@ -5,7 +5,7 @@ import os
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from fastapi_app.api import api_router
+from communication_agent.api import api_router
 
 # Create FastAPI app with enhanced documentation
 app = FastAPI(

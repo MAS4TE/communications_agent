@@ -8,8 +8,8 @@ import json
 
 from openai import OpenAI
 
-from fastapi_app.core.tools import Tools
-from fastapi_app.models.tool_schemas import tool_schemas
+from communication_agent.core.tools import Tools
+from communication_agent.models.tool_schemas import tool_schemas
 
 class SolarChatSession:
     """Chat session for handling conversation with OpenAI models.

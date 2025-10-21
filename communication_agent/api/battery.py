@@ -2,8 +2,8 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from fastapi_app.models.battery import BatteryStatus
-from fastapi_app.services.battery_service import BatteryService
+from communication_agent.models.battery import BatteryStatus
+from communication_agent.services.battery_service import BatteryService
 
 router = APIRouter(prefix="/battery", tags=["battery"])
 

@@ -3,7 +3,7 @@
 from datetime import datetime
 from functools import wraps
 
-from fastapi_app.services.battery_service import BatteryService
+from communication_agent.services.battery_service import BatteryService
 
 def trace_tool(tool_fn):
     """Decorator to trace tool calls."""

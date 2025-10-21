@@ -2,8 +2,8 @@
 
 from fastapi import APIRouter, Depends
 
-from fastapi_app.models.chat import ChatRequest, ChatResponse
-from fastapi_app.services.chat_service import ChatService
+from communication_agent.models.chat import ChatRequest, ChatResponse
+from communication_agent.services.chat_service import ChatService
 
 router = APIRouter(tags=["chat"])
 
