@@ -9,7 +9,17 @@ from fastapi.staticfiles import StaticFiles
 from communication_agent.api import api_router
 
 # Create FastAPI app with enhanced documentation
-def run_app(host="0.0.0.0", port=8080):
+def run_app(
+        host="0.0.0.0",
+        port=8080,
+        endpoint: str = "",
+        token: str = "",
+        model: str = "",
+):
+    # TODO OPEN UNIVERSITY
+    # make those parameters useable
+    # as this is hardcoded right now in the services/chat_service.py
+
     app = FastAPI(
         title="Solar Battery Assistant API",
         description="API for monitoring and interacting with a solar battery system, including both direct data access and a conversational assistant interface.",
