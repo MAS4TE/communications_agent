@@ -41,3 +41,6 @@ communication_llm = "communication_agent.main:run_app"
 
 [tool.setuptools.packages.find]
 include = ["communication_agent*"]
+
+[tool.setuptools.package-data]
+communication_agent = ["static/*"]
