@@ -1,6 +1,7 @@
 """Main FastAPI application."""
 
 import os
+from multiprocessing import Queue
 
 import uvicorn
 from fastapi import FastAPI
@@ -15,6 +16,8 @@ def run_app(
         endpoint: str = "",
         token: str = "",
         model: str = "",
+        market_to_llm_queue: Queue | None = None,
+        llm_to_market_queue: Queue | None = None,
 ):
     # TODO OPEN UNIVERSITY
     # make those parameters useable
@@ -35,6 +38,11 @@ def run_app(
             }
         ]
     )
+
+    # taken from
+    # https://stackoverflow.com/questions/71298179/fastapi-how-to-get-app-instance-inside-a-router
+    app.state.market_to_llm_queue = market_to_llm_queue
+    app.state.llm_to_market_queue = llm_to_market_queue
 
     # Mount static files directoryls
     static_dir = os.path.join(os.path.dirname(__file__), "static")
