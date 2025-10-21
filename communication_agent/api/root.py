@@ -4,6 +4,7 @@ from pathlib import Path
 import os
 from fastapi import APIRouter
 from fastapi.responses import FileResponse
+from fastapi import Request
 
 router = APIRouter()
 
@@ -14,7 +15,7 @@ def index():
     return Path(static_dir) / "index.html"
 
 @router.get('/get_queue')
-def some_router_function(request):
+def some_router_function(request: Request):
     market_message = request.app.state.market_to_llm_queue.get()
     print(f"Comm agent: {market_message=}")
     request.app.state.llm_to_market_queue.put("is okay market is open i got it!")
