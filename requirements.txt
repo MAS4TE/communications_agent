@@ -1,6 +1,8 @@
 fastapi>=0.119.1
+ollama>=0.6.0
 openai>=2.6.0
-psutil>=7.1.1
+pandas>=2.3.3
+psutil>=5.9.8
 pydantic>=2.12.3
 python>dotenv==1.1.1
-ollama>=0.6.0
+uvicorn>=0.38.0
