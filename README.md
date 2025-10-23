@@ -4,13 +4,18 @@ A FastAPI application for monitoring and interacting with a solar battery system
 
 ## Quick Start
 
+### Install dependencies
 ```bash
-# From the project root directory
-cd fastapi_app
-uvicorn fastapi_app.main:app --app-dir src --reload
+pip install -r requirements.txt
 ```
 
-Visit http://localhost:8000 for the chat interface.
+### Run the interface
+```bash
+# From the project root directory
+python3 ./communication_agent/main.py
+```
+
+Visit http://localhost:8080 for the chat interface.
 
 ## API Structure
 
@@ -18,32 +23,21 @@ Visit http://localhost:8000 for the chat interface.
 - `/docs` - Swagger UI documentation
 - `/redoc` - ReDoc documentation
 
-### Endpoints
+### Main endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/chat` | POST | Process chat messages |
 | `/battery/status` | GET | Get current battery status |
+| `/queue` | GET | Checks for  |
 
-## Project Organization
+## Contributing
 
-```
-fastapi_app/
-├── src/fastapi_app/
-│   ├── api/              # API endpoints
-│   ├── core/             # Core functionality
-│   ├── dependencies/     # FastAPI dependencies
-│   ├── models/           # Data models
-│   ├── services/         # Business logic
-│   └── static/           # Static files
-```
-
-## Development
+Please use pre-commit with the repository's configuration. Install and enable it with:
 
 ```bash
-# Install in development mode
-pip install -e .
-
-# Run tests
-pytest
+pip install pre-commit
+pre-commit install
 ```
+
+Thank you for contributing!
