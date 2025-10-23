@@ -1,7 +1,6 @@
 """Main FastAPI application."""
 
 import os
-from multiprocessing import Queue
 
 import uvicorn
 from fastapi import FastAPI
@@ -9,15 +8,24 @@ from fastapi.staticfiles import StaticFiles
 
 from communication_agent.api import api_router
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
+ENDPOINT = os.getenv("CHAT_ENDPOINT")
+TOKEN = os.getenv("CHAT_TOKEN")
+MODEL = os.getenv("CHAT_MODEL")
+
+
 # Create FastAPI app with enhanced documentation
 def run_app(
-        host="0.0.0.0",
-        port=8080,
-        endpoint: str = "",
-        token: str = "",
-        model: str = "",
-        market_to_llm_queue = None,
-        llm_to_market_queue = None,
+    host="0.0.0.0",
+    port=8080,
+    endpoint: str = ENDPOINT,
+    token: str = TOKEN,
+    model: str = MODEL,
+    market_to_llm_queue=None,
+    llm_to_market_queue=None,
 ):
     # TODO OPEN UNIVERSITY
     # make those parameters useable
@@ -30,13 +38,13 @@ def run_app(
         openapi_tags=[
             {
                 "name": "battery",
-                "description": "Operations related to battery monitoring and status"
+                "description": "Operations related to battery monitoring and status",
             },
             {
                 "name": "chat",
-                "description": "Chat interface with AI assistant for natural language interactions"
-            }
-        ]
+                "description": "Chat interface with AI assistant for natural language interactions",
+            },
+        ],
     )
 
     # taken from
