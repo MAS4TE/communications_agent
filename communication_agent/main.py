@@ -16,7 +16,6 @@ ENDPOINT = os.getenv("CHAT_ENDPOINT")
 TOKEN = os.getenv("CHAT_TOKEN")
 MODEL = os.getenv("CHAT_MODEL")
 
-
 # Create FastAPI app with enhanced documentation
 def run_app(
     host="0.0.0.0",
