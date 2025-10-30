@@ -4,6 +4,8 @@ from datetime import datetime
 from functools import wraps
 
 from communication_agent.services.battery_service import BatteryService
+from communication_agent.services.battery_utility_calculator import BatteryUtilityCalculator
+
 
 def trace_tool(tool_fn):
     """Decorator to trace tool calls."""
@@ -35,8 +37,14 @@ class Tools:
         def get_battery_status():
             """Get the current battery status."""
             return battery_service.get_battery_status()
+        
+
+        # Create battery utility calculator
+        buc_service = BatteryUtilityCalculator()
+        def get_battery_utility():
+            return buc_service.calculate()
             
         # Return list of tools with tracing applied
         return [
-            tracer(get_battery_status),
+            tracer(get_battery_status, get_battery_utility),
         ]
