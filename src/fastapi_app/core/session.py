@@ -20,7 +20,10 @@ class SolarChatSession:
     
     def __init__(self, client: OpenAI, prompt: str):
         self.client = client
-        self.prompt = prompt
+        self.prompt = (
+            "You are an expert assistant. Only answer questions related to batteries, solar energy, energy forecasts, "
+            "and related technical topics. If asked about general knowledge or unrelated subjects, politely decline."
+        )
         self.tools = Tools.get_tools() 
         self.tool_schemas = tool_schemas
 
