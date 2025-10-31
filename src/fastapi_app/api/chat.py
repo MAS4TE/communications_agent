@@ -7,9 +7,11 @@ from fastapi_app.services.chat_service import ChatService
 
 router = APIRouter(tags=["chat"])
 
+chat_service = ChatService() # Singleton
+
 # Dependency to get the chat service
 def get_chat_service():
-    return ChatService()
+    return chat_service
 
 @router.post(
     "",
