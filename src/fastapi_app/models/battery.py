@@ -8,3 +8,4 @@ class BatteryStatus(BaseModel):
     power_plugged: bool
     secsleft: int = None  # Optional
     status: str = None    # Optional
+
