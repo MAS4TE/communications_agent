@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>CPU Usage Forecast</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { max-width: 800px; margin: 0 auto; padding: 20px; font-family: 'Segoe UI', sans-serif; background: #f7f7f8; }
+    h1 { color: #10a37f; }
+    .forecast { margin: 20px 0; padding: 16px; background: #fff; border-radius: 8px; border: 1px solid #e5e5e5; }
+    #chart-container { background: #fff; border-radius: 8px; border: 1px solid #e5e5e5; padding: 16px; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <h1>CPU Usage Forecast</h1>
+  <div class="forecast" id="forecast-info">
+    Loading forecast...
+  </div>
+  <div id="chart-container">
+    <canvas id="cpuChart" width="700" height="300"></canvas>
+  </div>
+  <script>
+    // Fetch and display forecast
+    fetch('/cpu/forecast')
+      .then(res => res.json())
+      .then(data => {
+        const avg = data.average_percent !== null ? data.average_percent.toFixed(2) : 'N/A';
+        document.getElementById('forecast-info').innerHTML =
+          `<strong>Average CPU Usage:</strong> ${avg}%<br><strong>Samples:</strong> ${data.count}`;
+      });
+
+    // Fetch CPU history and plot
+    fetch('/cpu/history')
+      .then(res => res.json())
+      .then(data => {
+        const labels = data.map(d => d.timestamp);
+        const values = data.map(d => d.percent);
+        const ctx = document.getElementById('cpuChart').getContext('2d');
+        new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: 'CPU Usage (%)',
+              data: values,
+              borderColor: '#10a37f',
+              backgroundColor: 'rgba(16,163,127,0.1)',
+              fill: true,
+              tension: 0.2
+            }]
+          },
+          options: {
+            scales: {
+              x: { display: false },
+              y: { beginAtZero: true, max: 100 }
+            }
+          }
+        });
+      });
+  </script>
+</body>
+</html>
