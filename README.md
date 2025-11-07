@@ -83,6 +83,24 @@ pip install -e .
 pytest
 ```
 
+## Note on the forecaster
+
+The CPU forecaster currently uses a hardcoded Chronos URL in `src/services/cpu/cpu_forecaster.py`:
+
+```python
+class CPUForecaster:
+	def __init__(self, log_path="data/cpu_history", chronos_url="http://127.0.0.1:8000/forecast"):
+		...
+```
+
+If you run the Chronos forecasting server in a separate terminal, start it with:
+
+```bash
+uvicorn main:app  --host 127.0.0.1 --port 8000
+```
+
+Make sure the `chronos_url` in `cpu_forecaster.py` matches the address where Chronos is running. To avoid mismatches, consider configuring the URL via an environment variable (CHRONOS_URL) or a settings file.
+
 ## Adding a New API Endpoint
 
 **a. Define the Data Model (if needed):**
