@@ -1,9 +1,9 @@
 """Core tools functionality for function calling."""
-from fastapi_app.services.battery.battery_service import BatteryService
-from fastapi_app.services.cpu.cpu_service import CPUService
-from fastapi_app.services.cpu.cpu_forecaster import CPUForecaster
+from services.battery.battery_service import BatteryService
+from services.cpu.cpu_service import CPUService
+from services.cpu.cpu_forecaster import CPUForecaster
 
-from fastapi_app.core.llm.tools.decorators import trace_tool
+from .llm.tools.decorators import trace_tool
 
 
 class Tools:

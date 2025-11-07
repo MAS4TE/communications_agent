@@ -1,6 +1,6 @@
 """Chat service for processing chat messages."""
 
-from fastapi_app.services.chat.session import SolarChatSession
+from services.chat.session import SolarChatSession
 
 class ChatService:
     """Service for processing chat messages."""

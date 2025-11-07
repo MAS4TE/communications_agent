@@ -2,10 +2,10 @@
 
 from fastapi import APIRouter
 
-from fastapi_app.api.root import router as root_router
-from fastapi_app.api.chat import router as chat_router
-from fastapi_app.api.battery import router as battery_router
-from fastapi_app.api.cpu import router as cpu_router
+from .root import router as root_router
+from .chat import router as chat_router
+from .battery import router as battery_router
+from .cpu import router as cpu_router
 
 # Main API router
 api_router = APIRouter()

@@ -6,7 +6,7 @@ from typing import Optional, List
 from ..interfaces.agent import AgentLLM
 from ..tools.tools_manager import ToolManager
 
-from fastapi_app.utils.ansi import BOLD_BLUE, BOLD_GREEN, RESET
+from utils.ansi import BOLD_BLUE, BOLD_GREEN, RESET
 
 
 class LMStudioAgent(AgentLLM):

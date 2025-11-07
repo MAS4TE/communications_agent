@@ -6,8 +6,8 @@ import threading
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from fastapi_app.api import api_router
-from fastapi_app.services.cpu.cpu_service import CPUService
+from api import api_router
+from services.cpu.cpu_service import CPUService
 
 # Create FastAPI app with enhanced documentation
 app = FastAPI(

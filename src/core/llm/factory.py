@@ -2,12 +2,12 @@ from typing import Dict, Any, Type
 from pathlib import Path
 import yaml
 
-from fastapi_app.core.tools import Tools
+from ..tools import Tools
 
-from fastapi_app.core.llm.interfaces.base import BaseLLM
-from fastapi_app.core.llm.interfaces.agent import AgentLLM
-from fastapi_app.core.llm.backends.openai_agent import OpenAIAgent
-from fastapi_app.core.llm.backends.lmstudio_agent import LMStudioAgent
+from .interfaces.base import BaseLLM
+from .interfaces.agent import AgentLLM
+from .backends.openai_agent import OpenAIAgent
+from .backends.lmstudio_agent import LMStudioAgent
 
 
 class LLMFactory:
