@@ -3,7 +3,7 @@ import re
 import requests
 
 class CPUForecaster:
-    def __init__(self, log_path="data/cpu_history", chronos_url="http://127.0.0.1:8001/forecast"):
+    def __init__(self, log_path="data/cpu_history", chronos_url="http://127.0.0.1:8000/forecast"):
         self.log_path = Path(log_path)
         self.chronos_url = chronos_url
 

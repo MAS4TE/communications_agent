@@ -1,21 +1,10 @@
 """Core tools functionality for function calling."""
+from fastapi_app.services.battery.battery_service import BatteryService
+from fastapi_app.services.cpu.cpu_service import CPUService
+from fastapi_app.services.cpu.cpu_forecaster import CPUForecaster
 
-from datetime import datetime
-from functools import wraps
+from fastapi_app.core.llm.tools.decorators import trace_tool
 
-from fastapi_app.services.battery_service import BatteryService
-from fastapi_app.services.cpu_service import CPUService
-from fastapi_app.core.cpu_forecaster import CPUForecaster
-
-
-def trace_tool(tool_fn):
-    """Decorator to trace tool calls."""
-    @wraps(tool_fn)  # preserves __name__, __doc__, etc.
-    def wrapper(*args, **kwargs):
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        print(f"[{timestamp}] TOOL {tool_fn.__name__} called with args={args}, kwargs={kwargs}")
-        return tool_fn(*args, **kwargs)
-    return wrapper
 
 class Tools:
     """Registry and management of available tools for function calling."""

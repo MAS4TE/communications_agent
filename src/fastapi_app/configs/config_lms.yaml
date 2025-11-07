@@ -1,0 +1,25 @@
+llm:
+  default: "lmstudio"
+  openai:
+    name: "openai"
+    model_name: "gpt-3.5-turbo"
+    base_url: null
+    temperature: 0.0
+  lmstudio:
+    name: "lmstudio"
+    model_name: "qwen2.5-7b-instruct-1m"
+    base_url: "http://127.0.0.1:1234/v1"
+    temperature: 0.0
+    max_tokens: 512  # Limit response length
+    top_p: 0.1      # More focused sampling
+    frequency_penalty: 0.0
+    presence_penalty: 0.0
+    request_timeout: 120  # Timeout in seconds
+  huggingface:
+    name: "huggingface"
+    model_name: "meta-llama/Llama-2-7b-chat-hf"
+    temperature: 0.3
+    quantize_4bit: false
+    max_new_tokens: 500
+    top_k: 50
+    top_p: 0.95

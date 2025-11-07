@@ -4,7 +4,7 @@ tool_schemas = [
     {
         "name": "get_battery_status",
         "description": "Returns the current battery level of the device as a percentage.",
-        "parameters": {}  # no inputs needed
+        "parameters": {}
     },
     {
         "name": "get_cpu_status",
@@ -14,6 +14,15 @@ tool_schemas = [
     {
         "name": "get_cpu_forecast",
         "description": "Returns the average CPU usage percent from the log as a forecast.",
-        "parameters": {}
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "prediction_length": {
+                    "type": "integer",
+                    "description": "Number of time steps to forecast",
+                    "default": 1
+                }
+            }
+        }
     }
 ]
