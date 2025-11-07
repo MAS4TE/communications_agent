@@ -15,11 +15,3 @@ llm:
     frequency_penalty: 0.0
     presence_penalty: 0.0
     request_timeout: 120  # Timeout in seconds
-  huggingface:
-    name: "huggingface"
-    model_name: "meta-llama/Llama-2-7b-chat-hf"
-    temperature: 0.3
-    quantize_4bit: false
-    max_new_tokens: 500
-    top_k: 50
-    top_p: 0.95
