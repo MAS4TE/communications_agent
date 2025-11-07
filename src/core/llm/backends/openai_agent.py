@@ -7,9 +7,27 @@ from ..interfaces.agent import AgentLLM
 from ..tools.tools_manager import ToolManager
 
 class OpenAIAgent(AgentLLM):
-    def __init__(self, model_name="gpt-4o-mini", tool_manager: Optional[ToolManager] = None):
+    def __init__(
+            self, 
+            model_name="gpt-4o-mini", 
+            tool_manager: Optional[ToolManager] = None, 
+            api_key: Optional[str] = None
+        ):
         self.model_name = model_name
-        self.client = OpenAI()
+        
+        # Handle API key from either explicit parameter, environment, or authenticator
+        if api_key is not None:
+            self.api_key = api_key
+        else:
+            try:
+                from dependencies.auth import OpenAIAuthenticator
+                auth = OpenAIAuthenticator()
+                self.api_key = auth.api_key
+            except ImportError:
+                # Fallback to environment variable if authenticator not available
+                self.api_key = None  # OpenAI client will use OPENAI_API_KEY env var
+        
+        self.client = OpenAI(api_key=self.api_key)
         self.tool_manager = tool_manager or ToolManager()
         self.messages = []
 
