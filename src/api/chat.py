@@ -1,33 +1,18 @@
 """Chat API endpoints."""
 import sys
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from models.chat import ChatRequest, ChatResponse
 from services.chat.chat_service import ChatService
-from core.tools import Tools
-from models.tool_schemas import tool_schemas
-from core.llm.factory import LLMFactory
-from core.llm.tools.tools_manager import ToolManager
-
-
-# Setup at module level
-factory = LLMFactory()
-llm = factory.create_from_yaml("D:/Repos2/mas4te/fastapi_app/src/configs/config_openai.yaml", agentic=True)
-
-# Get all available tools and their schemas
-tools = Tools.get_tools()
-tool_manager = ToolManager(tools=tools, schemas=tool_schemas)
-llm.tool_manager = tool_manager  # Attach tool manager to LLM instance
 
 
 router = APIRouter(tags=["chat"])
 
-chat_service = ChatService(llm=llm) # Singleton
+def get_chat_service(request: Request) -> ChatService:
+    """Dependency that provides ChatService initialized with LLM from app state."""
+    return ChatService(llm=request.app.state.llm)
 
-# Dependency to get the chat service
-def get_chat_service():
-    return chat_service
 
 @router.post(
     "",

@@ -8,6 +8,11 @@ from fastapi.staticfiles import StaticFiles
 
 from api import api_router
 from services.cpu.cpu_service import CPUService
+from configs.settings import Settings
+from core.llm.factory import LLMFactory
+from core.tools import Tools
+from core.llm.tools.tools_manager import ToolManager
+from models.tool_schemas import tool_schemas
 
 # Create FastAPI app with enhanced documentation
 app = FastAPI(
@@ -34,8 +39,26 @@ app.mount("/static", StaticFiles(directory=static_dir), name="static")
 # Include API routes
 app.include_router(api_router)
 
+# Load settings
+settings = Settings()
+
 @app.on_event("startup")
-def start_cpu_logging():
+async def startup_event():
+    # Initialize LLM
+    factory = LLMFactory()
+    config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), settings.LLM_CONFIG_PATH)
+    llm = factory.create_from_yaml(config_path, agentic=True)
+    
+    # Set up tools
+    tools = Tools.get_tools()
+    tool_manager = ToolManager(tools=tools, schemas=tool_schemas)
+    llm.tool_manager = tool_manager
+    
+    # Store in app state
+    app.state.llm = llm
+    app.state.settings = settings
+
+    # Start CPU logging
     cpu_service = CPUService()
     thread = threading.Thread(
         target=cpu_service.log_cpu_usage,
