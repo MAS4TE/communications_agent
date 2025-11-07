@@ -4,15 +4,18 @@ import requests
 # Flag to choose backend:
 # True  = use your local LM Studio + Mistral
 # False = use Ollama / Gemma (university setup)
-USE_LMSTUDIO = True
+USE_LMSTUDIO = False
 
 if USE_LMSTUDIO:
-    MODEL_NAME = "mistral-7b-instruct-v0.3"  # your local model in LM Studio
+    # MODEL_NAME = "mistral-7b-instruct-v0.3"  # your local model in LM Studio
+    MODEL_NAME = "granite-3.3-8b-instruct"
     API_URL = "http://localhost:1234/v1/chat/completions"
 else:
-    from ollama import Ollama
-    MODEL_NAME = "gemma:27B"  # the university model
-    client = Ollama(model=MODEL_NAME)
+    # from ollama import Ollama
+    import ollama
+    # MODEL_NAME = "gemma:27B"  # the university model
+    MODEL_NAME = "gemma3:4b"
+    # client = ollama(model=MODEL_NAME)
 
 def chat(messages, model=None):
     """
@@ -29,4 +32,7 @@ def chat(messages, model=None):
         response.raise_for_status()  # raises error if something goes wrong
         return response.json()['choices'][0]['message']['content']
     else:
-        return client.chat(m,messages)
+        # Ollama usage — call chat directly
+        response = ollama.chat(model=m, messages=messages)
+        # response['message']['content'] contains the output
+        return response['message']['content']
