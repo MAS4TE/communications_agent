@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str | None = None
     
     # LLM Configuration
-    LLM_CONFIG_PATH: str = "src/configs/config_openai.yaml"
+    LLM_CONFIG_PATH: str = "src/configs/config_lms.yaml"
     
     # URLs and Endpoints
     CHRONOS_URL: str = "http://127.0.0.1:8000"  # Default local chronos URL
