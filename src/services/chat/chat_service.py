@@ -5,9 +5,9 @@ from .session import SolarChatSession
 class ChatService:
     """Service for processing chat messages."""
     
-    def __init__(self, llm):
+    def __init__(self, llm, prompt: str = "You are a solar battery assistant."):
         """Initialize the chat service with OpenAI client and session."""
-        self.session = SolarChatSession(llm, prompt="You are a solar battery assistant.")
+        self.session = SolarChatSession(llm, prompt=prompt)
 
     def process_message(self, message: str) -> str:
         """
