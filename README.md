@@ -83,6 +83,45 @@ pip install -e .
 pytest
 ```
 
+## Architecture TODOs
+
+### Service Layer Improvements
+Consider implementing Protocol-based service architecture for better maintainability:
+
+1. **Why?**
+   - Makes services easier to test (can mock dependencies)
+   - Makes it easier to change implementations
+   - Centralizes configuration in settings
+   - Provides clear contracts for service capabilities
+
+2. **How?**
+   - Define service protocols (interfaces) that specify what services can do
+   - Move service creation to app startup
+   - Use dependency injection via FastAPI's dependency system
+   - Store service instances in app.state
+
+3. **Example Pattern**:
+   ```python
+   # Protocol defines the contract
+   class ServiceProtocol(Protocol):
+       def do_something(self) -> str: ...
+
+   # Implementation fulfills the contract
+   class ServiceImpl(ServiceProtocol):
+       def __init__(self, config: Settings):
+           self.config = config
+       
+       def do_something(self) -> str:
+           # implementation
+           pass
+
+   # FastAPI uses dependency injection
+   def get_service(request: Request) -> ServiceProtocol:
+       return request.app.state.service
+   ```
+
+This maintains the same basic workflow for adding new features while making the code more maintainable and testable.
+
 ## Note on the forecaster
 
 The CPU forecaster currently uses a hardcoded Chronos URL in `src/services/cpu/cpu_forecaster.py`:
@@ -125,22 +164,78 @@ Make sure the `chronos_url` in `cpu_forecaster.py` matches the address where Chr
 
 ## Adding a New Tool (for function calling/chat)
 
-**a. Implement the Tool Function:**
-- Add the function to your tools registry (e.g., in `src/core/tools.py` or similar).
-- If needed, use services/models for business logic.
+**a. Create a New Service (if needed):**
+- Add a new service class in `src/services/new_feature/new_service.py`:
+	```python
+	class NewFeatureService:
+	    """Service for handling new feature business logic."""
+	    
+	    def __init__(self):
+	        # Initialize any dependencies
+	        pass
+	    
+	    def perform_operation(self, param: str):
+	        """Implement the actual business logic."""
+	        # Your implementation here
+	        return {"result": "data"}
+	```
 
-**b. Add Tool to Registry:**
-- Update the `get_tools` method to include your new tool, wrapped with tracing if needed.
+**b. Implement the Tool Function:**
+- Add the function to your tools registry in `src/core/tools.py`:
+	```python
+	from services.new_feature.new_service import NewFeatureService
+	
+	class Tools:
+	    @staticmethod
+	    def get_tools(tracer=trace_tool):
+	        # Create service instance
+	        new_feature_service = NewFeatureService()
+	        
+	        # Define tool function that uses the service
+	        def new_tool_function(param: str):
+	            """Description of what this tool does."""
+	            return new_feature_service.perform_operation(param)
+	        
+	        return [
+	            # ... existing tools
+	            tracer(new_tool_function),
+	        ]
+	```
 
-**c. Update Tool Schemas:**
+**c. Add Tool to Schema:**
 - Add a schema for the new tool in `src/models/tool_schemas.py`:
 	```python
 	{
-			"name": "new_tool_name",
-			"description": "Description of what the tool does.",
-			"parameters": { ... }
+	    "name": "new_tool_function",
+	    "description": "Description of what the tool does.",
+	    "parameters": {
+	        "type": "object",
+	        "properties": {
+	            "param": {
+	                "type": "string", 
+	                "description": "Parameter description"
+	            }
+	        },
+	        "required": ["param"]
+	    }
 	}
 	```
 
 **d. (Optional) Update Prompts:**
 - If your chat agent uses system prompts, update them to mention the new tool and its usage format.
+
+**e. (Optional) Add Service to Dependencies:**
+- If the service needs to be injected elsewhere, add it to the dependency system.
+
+
+User: What's my current battery status?
+
+User: How is the CPU performing right now?
+
+User: Please predict CPU usage for the next 3 time steps.
+
+User: Can you calculate the utility of a 15 kWh battery with sample data?
+
+User: Echo the number 42 for me using the debug tool.
+
+User: Test multi-argument tool with value=10 and factor=2.5.
