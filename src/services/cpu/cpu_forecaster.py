@@ -36,3 +36,11 @@ class CPUForecaster:
         resp = requests.post(self.chronos_url, json=payload)
         resp.raise_for_status()
         return resp.json()
+
+        # Dummy fast response
+        # median = sum(h["percent"] for h in history[-prediction_length:]) / max(prediction_length, 1)
+        # return {
+        #     "median": median,
+        #     "low": median * 0.37,
+        #     "high": median * 2.37
+        # }

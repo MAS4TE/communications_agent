@@ -45,11 +45,15 @@ class OpenAIAgent(AgentLLM):
 
     def invoke(self, messages: list[dict], tools: list | None = None) -> str:
         # merge tools with tool manager if provided
-        tools_to_use = tools or self.tool_manager.tools
+        functions = [
+            s["function"] if "function" in s else s
+            for s in self.tool_manager.schemas
+        ]
+        
         completion = self.client.chat.completions.create(
             model=self.model_name,
             messages=messages,
-            functions=[{"name": t.__name__, "description": t.__doc__} for t in tools_to_use],
+            functions=functions,
             function_call="auto",
         )
 

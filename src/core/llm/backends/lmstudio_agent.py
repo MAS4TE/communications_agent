@@ -44,8 +44,8 @@ class LMStudioAgent(AgentLLM):
         Agentic LMStudio invocation with tools.
         Streams fragments and collects final response.
         """
-        tools_to_use = tools or self.tool_manager.tools
-        schemas_to_use = self.tool_manager.schemas if self.tool_manager else []
+        tools_to_use = self.tool_manager.tools
+        tool_schemas = self.tool_manager.schemas
 
         # Reset chat and response chunks for new conversation
         self._chat = lms.Chat()
@@ -61,29 +61,19 @@ class LMStudioAgent(AgentLLM):
             elif msg["role"] == "assistant":
                 self._chat.add_assistant_response(msg["content"])
 
-        # Prepare tools with default arguments
-        def wrap_tool(tool_fn):
-            def wrapped(**args):
-                if tool_fn.__name__ == 'get_cpu_forecast' and 'prediction_length' not in args:
-                    args['prediction_length'] = 1
-                return tool_fn(**args)
-            wrapped.__name__ = tool_fn.__name__
-            wrapped.__doc__ = tool_fn.__doc__
-            return wrapped
 
-        # Wrap each tool with default argument handling
-        tools_with_defaults = [wrap_tool(tool) for tool in tools_to_use]
+
 
         # Call act with fragment callback
         self._model.act(
             self._chat,
-            tools=tools_with_defaults,
+            tools=tools_to_use,
             on_message=self.chat.append,
             on_prediction_fragment=self._log_fragment,
             config={
                 "maxTokens": 1000,
                 "temperature": 0.7,
-                "toolSchemas": schemas_to_use
+                "toolSchemas": tool_schemas
             },
         )
 
