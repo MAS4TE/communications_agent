@@ -1,7 +1,7 @@
 # core/llm/tools/battery_utility_tool.py
 import pandas as pd
 from core.llm.tools.decorators import tool, trace_tool
-from core.domain.battery_utility_calculator import BatteryUtilityCalculator
+from core.domain.battery_utility_logic import BatteryUtilityCalculator
 
 
 @tool(
@@ -87,7 +87,7 @@ def battery_utility_calculator(
     battery_calc_service = BatteryUtilityCalculator()
     print(f"DEBUG: battery_utility_calculator called with storage_size_kwh={storage_size_kwh}")
 
-    # If no arrays provided, use sample demo data
+    # Convert optional lists to pandas Series with sample defaults if None
     demand = pd.Series(demand_series or [10, 15, 20, 12, 8])
     solar = pd.Series(solar_series or [5, 8, 12, 10, 3])
     grid = pd.Series(grid_prices or [0.12, 0.15, 0.18, 0.14, 0.10])
