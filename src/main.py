@@ -6,13 +6,20 @@ import threading
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from api import api_router
-from services.cpu.cpu_service import CPUService
+from api.api_router import api_router
+from api.services.cpu.cpu_service import CPUService
 from configs.settings import Settings
 from core.llm.factory import LLMFactory
-from core.tools import Tools
-from core.llm.tools.tools_manager import ToolManager
-from models.tool_schemas import tool_schemas
+from core.llm.tools.registry import tool_registry
+
+# Import to ensure tool are registered in the central ToolRegistry
+import core.llm.tools.battery_tool
+import core.llm.tools.cpu_tool
+import core.llm.tools.echo_tool
+import core.llm.tools.multi_argument_tool
+import core.llm.tools.forecast_tool
+# import core.llm.tools.battery_utility_tool  # After installing the BatteryUtilityCalculator
+
 
 # Create FastAPI app with enhanced documentation
 app = FastAPI(
@@ -32,9 +39,13 @@ app = FastAPI(
 )
 
 # Mount static files directoryls
-static_dir = os.path.join(os.path.dirname(__file__), "static")
-app.mount("/static", StaticFiles(directory=static_dir), name="static")
+project_root = os.path.dirname(__file__)
+static_dir = os.path.join(project_root, "static")
 
+if not os.path.isdir(static_dir):
+    raise RuntimeError(f"Static directory not found at {static_dir}")
+
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 # Include API routes
 app.include_router(api_router)
@@ -50,9 +61,8 @@ async def startup_event():
     llm = factory.create_from_yaml(config_path, agentic=True)
     
     # Set up tools
-    tools = Tools.get_tools()
-    tool_manager = ToolManager(tools=tools, schemas=tool_schemas)
-    llm.tool_manager = tool_manager
+    llm.tools = tool_registry.tools
+    llm.schemas = tool_registry.schemas
     
     # Store in app state
     app.state.llm = llm
