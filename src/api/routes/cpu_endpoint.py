@@ -4,9 +4,9 @@ import re
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from models.cpu import CPUStatus
-from services.cpu.cpu_service import CPUService
-from services.cpu.cpu_forecaster import CPUForecaster
+from ..models.cpu import CPUStatus
+from ..services.cpu.cpu_service import CPUService
+from ..services.cpu.cpu_forecaster import CPUForecaster
 
 router = APIRouter(prefix="/cpu", tags=["cpu"])
 

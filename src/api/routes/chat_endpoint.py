@@ -3,9 +3,9 @@ import sys
 
 from fastapi import APIRouter, Depends, Request
 
-from models.chat import ChatRequest, ChatResponse
-from services.chat.chat_service import ChatService
-from core.prompts import BATTERY_ASSISTANT_PROMPT
+from ..models.chat import ChatRequest, ChatResponse
+from ..services.chat.chat_service import ChatService
+from core.llm.prompts import BATTERY_ASSISTANT_PROMPT
 
 
 router = APIRouter(tags=["chat"])
