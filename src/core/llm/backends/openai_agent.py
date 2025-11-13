@@ -4,13 +4,12 @@ from typing import List, Optional
 from openai import OpenAI
 
 from ..interfaces.agent import AgentLLM
-from ..tools.tools_manager import ToolManager
+from core.llm.tools.registry import tool_registry
 
 class OpenAIAgent(AgentLLM):
     def __init__(
             self, 
             model_name="gpt-4o-mini", 
-            tool_manager: Optional[ToolManager] = None, 
             api_key: Optional[str] = None
         ):
         self.model_name = model_name
@@ -20,7 +19,7 @@ class OpenAIAgent(AgentLLM):
             self.api_key = api_key
         else:
             try:
-                from dependencies.auth import OpenAIAuthenticator
+                from utils.auth import OpenAIAuthenticator
                 auth = OpenAIAuthenticator()
                 self.api_key = auth.api_key
             except ImportError:
@@ -28,8 +27,10 @@ class OpenAIAgent(AgentLLM):
                 self.api_key = None  # OpenAI client will use OPENAI_API_KEY env var
         
         self.client = OpenAI(api_key=self.api_key)
-        self.tool_manager = tool_manager or ToolManager()
         self.messages = []
+
+        self.tools = tool_registry.tools
+        self.schemas = tool_registry.schemas
 
     @property
     def llm(self):
@@ -43,11 +44,11 @@ class OpenAIAgent(AgentLLM):
     def backend_name(self):
         return f"{self.model_name}-agent"
 
-    def invoke(self, messages: list[dict], tools: list | None = None) -> str:
+    def invoke(self, messages: list[dict]) -> str:
         # merge tools with tool manager if provided
         functions = [
             s["function"] if "function" in s else s
-            for s in self.tool_manager.schemas
+            for s in tool_registry.schemas
         ]
         
         completion = self.client.chat.completions.create(
@@ -60,11 +61,17 @@ class OpenAIAgent(AgentLLM):
         msg = completion.choices[0].message
         reply = msg.content or ""
 
-        if msg.function_call:
+        if hasattr(msg, "function_call") and msg.function_call:
             name = msg.function_call.name
             args = msg.function_call.arguments or "{}"
-            import json
             args_dict = json.loads(args)
-            reply = f"{name} result: {self.tool_manager.call_tool(name, args_dict)}"
+
+            # Find the matching tool by name
+            for fn, schema in zip(tool_registry.tools, tool_registry.schemas):
+                fn_name = schema.get("function", {}).get("name", schema.get("name"))
+                if fn_name == name:
+                    result = fn(**args_dict)
+                    reply = f"{name} result: {result}"
+                    break
 
         return reply

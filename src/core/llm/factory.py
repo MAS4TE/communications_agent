@@ -2,7 +2,6 @@ from typing import Dict, Any, Type
 from pathlib import Path
 import yaml
 
-from ..tools import Tools
 
 from .interfaces.base import BaseLLM
 from .interfaces.agent import AgentLLM

@@ -4,7 +4,8 @@ import json
 from typing import Optional, List
 
 from ..interfaces.agent import AgentLLM
-from ..tools.tools_manager import ToolManager
+from core.llm.tools.registry import tool_registry
+
 
 from utils.ansi import BOLD_BLUE, BOLD_GREEN, RESET
 
@@ -12,13 +13,16 @@ from utils.ansi import BOLD_BLUE, BOLD_GREEN, RESET
 class LMStudioAgent(AgentLLM):
     """Agentic LM Studio LLM with tool use."""
 
-    def __init__(self, model_name: str = "qwen2.5-7b-instruct-1m", tool_manager: Optional[ToolManager] = None):
+    def __init__(self, model_name: str = "qwen2.5-7b-instruct-1m"):
         self.model_name = model_name
         self._model = lms.llm(model_name)
-        self.tool_manager = tool_manager or ToolManager()
+        
         self.messages: List[dict] = []
         self._chat = lms.Chat()
         self.response_chunks = []
+
+        self.tools_to_use = tool_registry.tools
+        self.tool_schemas = tool_registry.schemas
 
     @property
     def llm(self):
@@ -44,8 +48,7 @@ class LMStudioAgent(AgentLLM):
         Agentic LMStudio invocation with tools.
         Streams fragments and collects final response.
         """
-        tools_to_use = self.tool_manager.tools
-        tool_schemas = self.tool_manager.schemas
+        tools_to_use = tools or self.tools_to_use
 
         # Reset chat and response chunks for new conversation
         self._chat = lms.Chat()
@@ -61,9 +64,6 @@ class LMStudioAgent(AgentLLM):
             elif msg["role"] == "assistant":
                 self._chat.add_assistant_response(msg["content"])
 
-
-
-
         # Call act with fragment callback
         self._model.act(
             self._chat,
@@ -73,7 +73,7 @@ class LMStudioAgent(AgentLLM):
             config={
                 "maxTokens": 1000,
                 "temperature": 0.7,
-                "toolSchemas": tool_schemas
+                "toolSchemas": self.tool_schemas
             },
         )
 
