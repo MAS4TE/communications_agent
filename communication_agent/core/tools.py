@@ -60,7 +60,7 @@ class Tools:
             }
         
         @tracer
-        def get_time():
+        def get_time_and_date():
             # Set the timezone to Netherlands
             nl_timezone = pytz.timezone("Europe/Amsterdam")
             # Get current datetime in NL
@@ -77,5 +77,5 @@ class Tools:
         #     set_suggested_bid,
         # ]
         return [
-            get_suggested_bid
+            get_time_and_date
         ]
