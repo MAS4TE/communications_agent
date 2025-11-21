@@ -144,12 +144,12 @@ class Pipeline:
             print(f"\nError: {e}")
             import traceback
             traceback.print_exc()
-        return storage_size, result['baseline_cost']
+        return result['optimized_cost'], storage_size
 
     def set_buc_bid(self): 
         """
         Update the current bid in the agent state based on the output of the BUC
         """
         print('set the new bid from the BUC')
-        storage_size, price = self.run_battery_utility_calculator()
-        self.agent_state.set_current_bid(storage_size, price)
+        price, storage_size = self.run_battery_utility_calculator()
+        self.agent_state.set_current_bid(price, storage_size)

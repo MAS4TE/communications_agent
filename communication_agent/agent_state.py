@@ -15,8 +15,8 @@ class AgentState:
             "market_id": self.upcoming_market["id"],
             "agent_id": "1",
             "type": "supply",   
-            "price": 12.0,       # default placeholder
-            "volume": 2.0#,      # default placeholder
+            "price": 0,       # default placeholder
+            "volume": 0#,      # default placeholder
             # "timestamp": datetime.now().isoformat(),
         }
 
