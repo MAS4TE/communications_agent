@@ -1,3 +1,4 @@
+# api/services/battery/battery_service.py
 """Battery service for battery status and operations."""
 
 from fastapi import HTTPException
