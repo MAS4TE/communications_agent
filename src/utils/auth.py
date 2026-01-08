@@ -13,7 +13,7 @@ class OpenAIAuthenticator:
 
     def _default_env_path(self) -> Path:
         """Locate default .env file two levels up (e.g., for notebooks)."""
-        root = Path("D:/Repos2/")
+        root = Path("D:/Repos2")
         dotenv_path = root / ".env"
         return dotenv_path
 
