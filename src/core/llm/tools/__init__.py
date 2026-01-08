@@ -8,3 +8,4 @@ import core.llm.tools.echo_tool
 import core.llm.tools.multi_argument_tool
 import core.llm.tools.forecast_tool
 import core.llm.tools.battery_utility_tool
+import core.llm.tools.time_tool

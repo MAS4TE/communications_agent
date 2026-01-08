@@ -5,6 +5,7 @@ import threading
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from fastapi import Request
 
 from api.api_router import api_router
 from api.services.cpu.cpu_service import CPUService
@@ -12,6 +13,9 @@ from configs.settings import Settings
 from core.llm.factory import LLMFactory
 from core.llm.tools.registry import tool_registry
 import core.llm.tools
+
+from core.pipeline.manager import PipelineManager
+from core.pipeline.steps import STEPS
 
 settings = Settings()
 
@@ -41,6 +45,19 @@ async def lifespan(app: FastAPI):
     )
     thread.start()
 
+
+    # pipeline part
+    # 1. Create the pipeline manager
+    pipeline = PipelineManager(steps=STEPS)
+
+    # 2. Start the pipeline worker (runs jobs in the background)
+    await pipeline.start_worker()
+
+    #3. Store the pipeline manager in app state for access in routes
+    app.state.pipeline = pipeline
+    # Enqueue a job immediately on startup
+    await pipeline.enqueue({})  # this triggers the steps automatically
+
     yield
 
 # Create FastAPI app with lifespan
@@ -66,3 +83,9 @@ app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 # Include API routes
 app.include_router(api_router)
+
+# @app.get("/run_test_pipeline")
+# async def run_test_pipeline(request: Request):
+#     # Enqueue a job with empty data
+#     job_id = await request.app.state.pipeline.enqueue({})
+#     return {"job_id": job_id, "status": "queued"}
