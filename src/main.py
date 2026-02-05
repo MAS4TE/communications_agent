@@ -15,7 +15,14 @@ from core.llm.tools.registry import tool_registry
 import core.llm.tools
 
 from core.pipeline.manager import PipelineManager
-from core.pipeline.steps import STEPS
+from core.pipeline.steps import STEP_MAP
+
+from core.mqtt.agent_client import MqttAgent
+import asyncio
+
+from core.main_context import GLOBAL_PROFILE_ID
+from core.main_context import set_mqtt_agent
+
 
 settings = Settings()
 
@@ -48,7 +55,7 @@ async def lifespan(app: FastAPI):
 
     # pipeline part
     # 1. Create the pipeline manager
-    pipeline = PipelineManager(steps=STEPS)
+    pipeline = PipelineManager(step_map=STEP_MAP)
 
     # 2. Start the pipeline worker (runs jobs in the background)
     await pipeline.start_worker()
@@ -56,7 +63,22 @@ async def lifespan(app: FastAPI):
     #3. Store the pipeline manager in app state for access in routes
     app.state.pipeline = pipeline
     # Enqueue a job immediately on startup
-    await pipeline.enqueue({})  # this triggers the steps automatically
+    # await pipeline.enqueue({})  # this triggers the steps automatically
+
+
+    loop = asyncio.get_running_loop()
+    app.state.loop = loop
+
+    # mqtt agent startup
+    mqtt_agent = MqttAgent(
+            broker="localhost", 
+            port = 1883,
+            agent_id = "B_01",
+            pipeline_manager=pipeline, 
+            loop = loop
+    )
+    mqtt_agent.start()
+    set_mqtt_agent(mqtt_agent)
 
     yield
 
@@ -83,6 +105,9 @@ app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 # Include API routes
 app.include_router(api_router)
+
+# GLOBAL_PROFILE_ID = 3
+# app.state.global_profile_id = GLOBAL_PROFILE_ID
 
 # @app.get("/run_test_pipeline")
 # async def run_test_pipeline(request: Request):

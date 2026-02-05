@@ -14,7 +14,7 @@ class Settings(BaseSettings):
 
     # URLs and Endpoints
     CHRONOS_URL: str = "http://127.0.0.1:8000"
-    CHRONOS_TIMEOUT: int = 15
+    CHRONOS_TIMEOUT: int = 500#120#15
 
     # Log Paths
     CPU_LOG_PATH: str = "../../data/cpu_history"
