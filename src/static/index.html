@@ -3,291 +3,508 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Solar Battery Assistant</title>
+  <title>MAS4TE Assistant</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
     :root {
-      --primary-color: #10a37f;
-      --text-color: #353740;
-      --secondary-text: #6e6e80;
-      --background-color: #ffffff;
-      --chat-background: #f7f7f8;
+      --primary: #10a37f;
+      --primary-dark: #0a8f6d;
+      --primary-light: rgba(16, 163, 127, 0.12);
+      --text: #1a1a2e;
+      --text-muted: #6e7191;
+      --bg: #f8f9fc;
+      --surface: #ffffff;
+      --border: #e4e7f0;
       --user-bubble: #10a37f;
-      --assistant-bubble: #f7f7f8;
-      --border-color: #e5e5e5;
+      --panel-width: 280px;
     }
-    
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', Oxygen, Ubuntu, Cantarell, sans-serif;
-    }
-    
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
     body {
-      background-color: var(--background-color);
-      color: var(--text-color);
-      line-height: 1.6;
-      max-width: 800px;
-      margin: 0 auto;
-      padding: 20px;
-    }
-    
-    header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding-bottom: 20px;
-      border-bottom: 1px solid var(--border-color);
-      margin-bottom: 20px;
-    }
-    
-    h1 {
-      font-size: 1.5rem;
-      font-weight: 600;
-      color: var(--primary-color);
-    }
-    
-    .chat-container {
-      height: calc(100vh - 180px);
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
       display: flex;
       flex-direction: column;
+      overflow: hidden;
     }
-    
+
+    /* ── HEADER ── */
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 24px; background: var(--surface);
+      border-bottom: 1px solid var(--border); z-index: 10; flex-shrink: 0;
+    }
+    .header-left { display: flex; align-items: center; gap: 14px; }
+    .header-left img { height: 180px; }
+    .header-title { font-size: 1.1rem; font-weight: 600; color: var(--primary); letter-spacing: -0.3px; }
+    .header-subtitle { font-size: 0.72rem; color: var(--text-muted); margin-top: 1px; }
+    .battery-pill {
+      display: flex; align-items: center; gap: 6px;
+      background: var(--bg); border: 1px solid var(--border);
+      padding: 5px 12px; border-radius: 20px;
+      font-size: 0.82rem; font-weight: 500; color: var(--text-muted);
+    }
+
+    /* ── LAYOUT ── */
+    .main-layout { display: flex; flex: 1; overflow: hidden; }
+
+    /* ── CHAT ── */
+    .chat-area {
+      flex: 1; display: flex; flex-direction: column;
+      overflow: hidden; margin-right: var(--panel-width);
+    }
     #chat-box {
-      flex-grow: 1;
-      overflow-y: auto;
-      padding: 10px 0;
+      flex: 1; overflow-y: auto; padding: 24px 28px;
+      display: flex; flex-direction: column; gap: 10px;
     }
-    
     .message {
-      padding: 12px 16px;
-      margin-bottom: 10px;
-      border-radius: 10px;
-      max-width: 85%;
-      word-wrap: break-word;
+      padding: 12px 16px; border-radius: 14px; max-width: 78%;
+      word-wrap: break-word; font-size: 0.92rem; line-height: 1.6;
+      animation: msgIn 0.2s ease;
     }
-    
+    @keyframes msgIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
     .user-message {
-      background-color: var(--user-bubble);
-      color: white;
-      align-self: flex-end;
-      margin-left: auto;
+      background: var(--user-bubble); color: white;
+      align-self: flex-end; border-bottom-right-radius: 4px;
     }
-    
     .assistant-message {
-      background-color: var(--assistant-bubble);
-      border: 1px solid var(--border-color);
-      align-self: flex-start;
+      background: var(--surface); border: 1px solid var(--border);
+      align-self: flex-start; border-bottom-left-radius: 4px;
     }
-    
     .input-area {
-      display: flex;
-      position: sticky;
-      bottom: 0;
-      background-color: var(--background-color);
-      padding: 15px 0;
-      border-top: 1px solid var(--border-color);
+      display: flex; padding: 14px 24px; background: var(--surface);
+      border-top: 1px solid var(--border); gap: 10px; flex-shrink: 0;
     }
-    
     #user-input {
-      flex-grow: 1;
-      padding: 12px 16px;
-      border-radius: 8px;
-      border: 1px solid var(--border-color);
-      font-size: 16px;
-      outline: none;
-      transition: border-color 0.2s;
+      flex: 1; padding: 11px 16px; border-radius: 10px;
+      border: 1px solid var(--border); font-size: 0.92rem;
+      font-family: 'DM Sans', sans-serif; outline: none;
+      background: var(--bg); color: var(--text);
+      transition: border-color 0.2s, box-shadow 0.2s;
     }
-    
     #user-input:focus {
-      border-color: var(--primary-color);
-      box-shadow: 0 0 0 2px rgba(16, 163, 127, 0.2);
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(16,163,127,0.15); background: #fff;
     }
-    
-    button {
-      margin-left: 10px;
-      padding: 12px 20px;
-      background-color: var(--primary-color);
-      color: white;
-      border: none;
-      border-radius: 8px;
-      font-size: 16px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: background-color 0.2s;
+    #send-btn {
+      padding: 11px 20px; background: var(--primary); color: white;
+      border: none; border-radius: 10px; font-size: 0.92rem; font-weight: 600;
+      font-family: 'DM Sans', sans-serif; cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
     }
-    
-    button:hover {
-      background-color: #0a8f6d;
+    #send-btn:hover { background: var(--primary-dark); transform: scale(1.02); }
+
+    /* ── SIDE PANEL ── */
+    #side-panel {
+      position: fixed; top: 0; right: 0;
+      width: var(--panel-width); height: 100vh;
+      background: var(--surface); border-left: 1px solid var(--border);
+      z-index: 100; display: flex; flex-direction: column;
+      box-shadow: -4px 0 20px rgba(0,0,0,0.05);
     }
-    
-    .battery-status {
-      margin-top: 10px;
-      padding: 10px;
-      background-color: var(--assistant-bubble);
-      border-radius: 8px;
-      border: 1px solid var(--border-color);
-      display: flex;
-      align-items: center;
+
+    /* ── TABS ── */
+    .panel-tabs { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .panel-tab {
+      flex: 1; padding: 14px 0; background: none; border: none;
+      border-bottom: 2px solid transparent; margin-bottom: -1px;
+      font-family: 'DM Sans', sans-serif; font-size: 0.82rem; font-weight: 600;
+      color: var(--text-muted); cursor: pointer; transition: color 0.2s, border-color 0.2s;
     }
-    
-    .battery-icon {
-      margin-right: 10px;
-      font-size: 24px;
+    .panel-tab:hover { color: var(--text); }
+    .panel-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+    .tab-content { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+    .panel-body {
+      padding: 22px 20px; display: flex; flex-direction: column;
+      gap: 28px; flex: 1; overflow-y: auto;
     }
-    
-    @media (max-width: 600px) {
-      body {
-        padding: 10px;
-      }
-      
-      .message {
-        max-width: 90%;
-      }
+
+    /* ── SLIDERS ── */
+    .pref-section label {
+      display: block; font-size: 0.75rem; font-weight: 600;
+      color: var(--text-muted); letter-spacing: 0.06em;
+      text-transform: uppercase; margin-bottom: 14px;
+    }
+    .step-track {
+      position: relative; height: 6px;
+      background: var(--border); border-radius: 4px; margin: 0 10px;
+    }
+    .step-fill {
+      position: absolute; left: 0; top: 0; height: 100%;
+      border-radius: 4px; transition: width 0.3s ease, background 0.3s ease;
+    }
+    .step-dots {
+      position: absolute; top: 50%; transform: translateY(-50%);
+      left: 0; right: 0; display: flex; justify-content: space-between;
+    }
+    .step-dot {
+      width: 14px; height: 14px; border-radius: 50%;
+      background: var(--surface); border: 2px solid var(--border);
+      cursor: pointer; z-index: 1;
+      transition: border-color 0.2s, transform 0.2s, background 0.2s;
+    }
+    .step-dot.active { transform: scale(1.25); }
+    .step-range {
+      position: absolute; top: -8px; left: 0; right: 0;
+      width: 100%; opacity: 0; cursor: pointer; height: 22px; margin: 0;
+    }
+    .step-labels { display: flex; justify-content: space-between; margin: 10px 10px 0; }
+    .step-label {
+      font-size: 0.76rem; font-weight: 500; color: var(--text-muted);
+      transition: color 0.2s; text-align: center; cursor: pointer;
+    }
+    .step-label.active { font-weight: 700; }
+    .pref-summary {
+      padding: 10px 14px; background: var(--bg);
+      border-radius: 10px; border: 1px solid var(--border);
+      font-size: 0.8rem; color: var(--text-muted); line-height: 1.5;
+    }
+    .pref-summary span { font-weight: 600; color: var(--text); }
+
+    /* ── FOOTER ── */
+    .panel-footer { padding: 16px 20px; border-top: 1px solid var(--border); flex-shrink: 0; }
+    #save-prefs {
+      width: 100%; padding: 10px; background: var(--primary); color: white;
+      border: none; border-radius: 10px; font-size: 0.88rem; font-weight: 600;
+      font-family: 'DM Sans', sans-serif; cursor: pointer; transition: background 0.2s;
+    }
+    #save-prefs:hover { background: var(--primary-dark); }
+    #save-note {
+      text-align: center; font-size: 0.75rem; color: var(--primary);
+      margin-top: 8px; height: 16px; transition: opacity 0.3s; opacity: 0;
+    }
+    #save-note.show { opacity: 1; }
+
+    /* ── PROFILE ── */
+    .profile-note {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 0.74rem; color: var(--text-muted);
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 8px; padding: 8px 12px;
+    }
+    .profile-field {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 11px 0; border-bottom: 1px solid var(--border);
+    }
+    .profile-field:last-child { border-bottom: none; }
+    .profile-field-label { font-size: 0.83rem; color: var(--text); font-weight: 500; }
+    .profile-number {
+      font-size: 1rem; font-weight: 700; color: var(--primary);
+      font-family: 'DM Mono', monospace;
+    }
+    .profile-badge {
+      font-size: 0.75rem; font-weight: 600;
+      padding: 3px 10px; border-radius: 20px; letter-spacing: 0.02em;
+    }
+    .profile-badge[data-value="true"] {
+      background: rgba(16,163,127,0.1); color: var(--primary);
+      border: 1px solid rgba(16,163,127,0.25);
+    }
+    .profile-badge[data-value="false"] {
+      background: var(--bg); color: var(--text-muted); border: 1px solid var(--border);
     }
   </style>
 </head>
 <body>
-  <header style="display: flex; align-items: center; justify-content: space-between;">
-    <h1>Solar Battery Assistant</h1>
-    <img src="/static/Logo_MAS4TE_EN.png" alt="MAS4TE Logo" style="height: 100px;">
+
+  <header>
+    <div class="header-left">
+      <img src="/static/Logo_MAS4TE_EN.png" alt="MAS4TE Logo">
+      <div>
+        <div class="header-title">MAS4TE Assistant</div>
+        <div class="header-subtitle">Smart Energy Management</div>
+      </div>
+    </div>
     <div id="battery-indicator"></div>
   </header>
 
-  <div class="chat-container">
-    <div id="chat-box"></div>
-    
-    <div class="input-area">
-      <input 
-        id="user-input" 
-        placeholder="Message Solar Battery Assistant..." 
-        autocomplete="off"
-        onkeydown="if(event.key==='Enter') sendMessage()"
-      />
-      <button onclick="sendMessage()">Send</button>
+  <div class="main-layout">
+
+    <!-- CHAT -->
+    <div class="chat-area">
+      <div id="chat-box"></div>
+      <div class="input-area">
+        <input id="user-input" placeholder="Message MAS4TE Assistant…" autocomplete="off"
+          onkeydown="if(event.key==='Enter') sendMessage()"/>
+        <button id="send-btn" onclick="sendMessage()">Send</button>
+      </div>
     </div>
+
+    <!-- SIDE PANEL -->
+    <div id="side-panel">
+
+      <div class="panel-tabs">
+        <button class="panel-tab active" id="tab-prefs"   onclick="switchTab('prefs')">Preferences</button>
+        <button class="panel-tab"        id="tab-profile" onclick="switchTab('profile')">Profile</button>
+      </div>
+
+      <!-- PREFERENCES -->
+      <div id="panel-prefs" class="tab-content">
+        <div class="panel-body">
+
+          <div class="pref-section">
+            <label>Risk Score</label>
+            <div class="step-slider-wrap">
+              <div class="step-track">
+                <div class="step-fill" id="risk-fill"></div>
+                <div class="step-dots" id="risk-dots"></div>
+                <input type="range" class="step-range" id="risk-range" min="0" max="2" step="1" value="1">
+              </div>
+              <div class="step-labels" id="risk-labels"></div>
+            </div>
+          </div>
+
+          <div class="pref-section">
+            <label>Trading Preference</label>
+            <div class="step-slider-wrap">
+              <div class="step-track">
+                <div class="step-fill" id="pref-fill"></div>
+                <div class="step-dots" id="pref-dots"></div>
+                <input type="range" class="step-range" id="pref-range" min="0" max="1" step="1" value="0">
+              </div>
+              <div class="step-labels" id="pref-labels"></div>
+            </div>
+          </div>
+
+          <div class="pref-summary" id="pref-summary"></div>
+
+        </div>
+        <div class="panel-footer">
+          <button id="save-prefs" onclick="savePreferences()">Save Preferences</button>
+          <div id="save-note">✓ Preferences saved!</div>
+        </div>
+      </div>
+
+      <!-- PROFILE -->
+      <div id="panel-profile" class="tab-content" style="display:none;">
+        <div class="panel-body">
+
+          <div class="profile-note">
+            <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+            </svg>
+            Loaded from system — read only
+          </div>
+
+          <div class="profile-field">
+            <div class="profile-field-label">People in household</div>
+            <span class="profile-number" id="profile-people">3</span>
+          </div>
+          <div class="profile-field">
+            <div class="profile-field-label">Electric car</div>
+            <div class="profile-badge" data-value="true" id="profile-ev">Yes</div>
+          </div>
+          <div class="profile-field">
+            <div class="profile-field-label">Heat pump</div>
+            <div class="profile-badge" data-value="false" id="profile-heatpump">No</div>
+          </div>
+          <div class="profile-field">
+            <div class="profile-field-label">Solar panels</div>
+            <div class="profile-badge" data-value="true" id="profile-solar">Yes</div>
+          </div>
+          <div class="profile-field">
+            <div class="profile-field-label">Home battery</div>
+            <div class="profile-badge" data-value="true" id="profile-battery">Yes</div>
+          </div>
+          <div class="profile-field">
+            <div class="profile-field-label">Electric water heating</div>
+            <div class="profile-badge" data-value="false" id="profile-water">No</div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+
   </div>
 
   <script>
-    // Display a welcome message when the page loads
+    // ── SLIDERS ──
+    const RISK_STEPS = [
+      { label: 'Low',    color: '#10a37f' },
+      { label: 'Medium', color: '#f59e0b' },
+      { label: 'High',   color: '#ef4444' },
+    ];
+    const PREF_STEPS = [
+      { label: 'Profit', color: '#6366f1' },
+      { label: 'Green',  color: '#22c55e' },
+    ];
+
+    let riskValue = 1;
+    let prefValue = 0;
+
+    function buildSlider(dotsId, labelsId, fillId, rangeId, steps, getValue, setValue) {
+      const dotsEl   = document.getElementById(dotsId);
+      const labelsEl = document.getElementById(labelsId);
+      const rangeEl  = document.getElementById(rangeId);
+
+      dotsEl.innerHTML = '';
+      steps.forEach((_, i) => {
+        const dot = document.createElement('div');
+        dot.className = 'step-dot';
+        dot.onclick = () => { setValue(i); refresh(); };
+        dotsEl.appendChild(dot);
+      });
+
+      labelsEl.innerHTML = '';
+      steps.forEach((s, i) => {
+        const lbl = document.createElement('div');
+        lbl.className = 'step-label';
+        lbl.textContent = s.label;
+        lbl.onclick = () => { setValue(i); refresh(); };
+        labelsEl.appendChild(lbl);
+      });
+
+      rangeEl.oninput = () => { setValue(parseInt(rangeEl.value)); refresh(); };
+
+      function refresh() {
+        const v = getValue();
+        const color = steps[v].color;
+        const maxIdx = steps.length - 1;
+        document.getElementById(fillId).style.width = maxIdx ? `${(v/maxIdx)*100}%` : '0%';
+        document.getElementById(fillId).style.background = color;
+        dotsEl.querySelectorAll('.step-dot').forEach((d, i) => {
+          d.classList.toggle('active', i === v);
+          d.style.background  = i === v ? color : '';
+          d.style.borderColor = i === v ? color : '';
+        });
+        labelsEl.querySelectorAll('.step-label').forEach((l, i) => {
+          l.classList.toggle('active', i === v);
+          l.style.color = i === v ? color : '';
+        });
+        rangeEl.value = v;
+        updateSummary();
+      }
+
+      refresh();
+    }
+
+    function updateSummary() {
+      const r = RISK_STEPS[riskValue].label;
+      const p = PREF_STEPS[prefValue].label;
+      document.getElementById('pref-summary').innerHTML =
+        `Strategy: <span>${r} risk</span> · <span>${p === 'Green' ? '🌱 Green energy' : '💰 Max profit'}</span>`;
+    }
+
+    function initSliders() {
+      buildSlider('risk-dots','risk-labels','risk-fill','risk-range', RISK_STEPS, ()=>riskValue, v=>{riskValue=v;});
+      buildSlider('pref-dots','pref-labels','pref-fill','pref-range', PREF_STEPS, ()=>prefValue, v=>{prefValue=v;});
+    }
+
+    // ── TABS ──
+    function switchTab(tab) {
+      document.getElementById('panel-prefs').style.display   = tab==='prefs'   ? 'flex' : 'none';
+      document.getElementById('panel-profile').style.display = tab==='profile' ? 'flex' : 'none';
+      document.getElementById('tab-prefs').classList.toggle('active',   tab==='prefs');
+      document.getElementById('tab-profile').classList.toggle('active', tab==='profile');
+    }
+
+    // ── PROFILE ──
+    async function loadProfile() {
+      try {
+        const res = await fetch('/prosumer/profile');
+        const d = await res.json();
+        if (d.people != null) document.getElementById('profile-people').textContent = d.people;
+        setBadge('profile-ev',       d.electric_car);
+        setBadge('profile-heatpump', d.heat_pump);
+        setBadge('profile-solar',    d.solar_panels);
+        setBadge('profile-battery',  d.home_battery);
+        setBadge('profile-water',    d.electric_water_heating);
+      } catch(e) { /* keep placeholder values until endpoint is ready */ }
+    }
+    function setBadge(id, val) {
+      if (val == null) return;
+      const el = document.getElementById(id);
+      el.dataset.value = val ? 'true' : 'false';
+      el.textContent = val ? 'Yes' : 'No';
+    }
+
+    // ── SAVE ──
+    async function savePreferences() {
+      const note = document.getElementById('save-note');
+      try {
+        const res = await fetch('/prosumer/preferences', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            risk: RISK_STEPS[riskValue].label,
+            trading_preference: PREF_STEPS[prefValue].label
+          })
+        });
+        if (!res.ok) throw new Error();
+        note.textContent = '✓ Preferences saved!';
+        note.style.color = 'var(--primary)';
+      } catch(e) {
+        note.textContent = '✗ Failed to save, try again';
+        note.style.color = '#ef4444';
+      }
+      note.classList.add('show');
+      setTimeout(() => note.classList.remove('show'), 2200);
+    }
+
+    // ── INIT ──
     window.onload = function() {
-      const chatBox = document.getElementById('chat-box');
-      chatBox.innerHTML = `
+      initSliders();
+      loadProfile();
+      document.getElementById('chat-box').innerHTML = `
         <div class="message assistant-message">
-          <p>Hello! I'm your Solar Battery Assistant. You can ask me about your battery status, charging information, or any other questions about your solar battery system.</p>
-        </div>
-      `;
-      
-      // Fetch initial battery status
+          Hello! I'm your MAS4TE Assistant. You can ask me about your battery status, energy consumption, or actions on the market.
+        </div>`;
       fetchBatteryStatus();
     };
-    
+
+    // ── CHAT ──
     async function sendMessage() {
       const input = document.getElementById('user-input');
       const msg = input.value.trim();
-      
-      if (!msg) return; // Prevent empty messages
-      
+      if (!msg) return;
       input.value = '';
-      
-      // Display user message
       const chatBox = document.getElementById('chat-box');
-      chatBox.innerHTML += `
-        <div class="message user-message">
-          <p>${escapeHTML(msg)}</p>
-        </div>
-      `;
-      
-      // Show typing indicator
-      chatBox.innerHTML += `
-        <div id="typing-indicator" class="message assistant-message">
-          <p>Thinking...</p>
-        </div>
-      `;
-      
-      // Scroll to bottom
+      chatBox.innerHTML += `<div class="message user-message">${escapeHTML(msg)}</div>`;
+      chatBox.innerHTML += `<div id="typing-indicator" class="message assistant-message">Thinking…</div>`;
       chatBox.scrollTop = chatBox.scrollHeight;
-      
       try {
-        // Send message to API
-        const response = await fetch('/chat', {
+        const res = await fetch('/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: msg })
+          body: JSON.stringify({
+            message: msg,
+            preferences: { risk: RISK_STEPS[riskValue].label, trading_preference: PREF_STEPS[prefValue].label }
+          })
         });
-        
-        const data = await response.json();
-        
-        // Remove typing indicator
-        const typingIndicator = document.getElementById('typing-indicator');
-        typingIndicator.remove();
-        
-        // Display assistant response
-        chatBox.innerHTML += `
-          <div class="message assistant-message">
-            <p>${escapeHTML(data.response)}</p>
-          </div>
-        `;
-        
-        // Scroll to bottom again
-        chatBox.scrollTop = chatBox.scrollHeight;
-        
-        // Update battery status after interaction
-        fetchBatteryStatus();
-        
-      } catch (error) {
-        console.error('Error:', error);
-        // Remove typing indicator
-        const typingIndicator = document.getElementById('typing-indicator');
-        typingIndicator.remove();
-        
-        // Display error message
-        chatBox.innerHTML += `
-          <div class="message assistant-message">
-            <p>Sorry, there was an error processing your request. Please try again.</p>
-          </div>
-        `;
+        const data = await res.json();
+        document.getElementById('typing-indicator').remove();
+        chatBox.innerHTML += `<div class="message assistant-message">${escapeHTML(data.response)}</div>`;
+      } catch(e) {
+        document.getElementById('typing-indicator').remove();
+        chatBox.innerHTML += `<div class="message assistant-message">Sorry, there was an error. Please try again.</div>`;
       }
+      chatBox.scrollTop = chatBox.scrollHeight;
+      fetchBatteryStatus();
     }
-    
+
     async function fetchBatteryStatus() {
       try {
-        const response = await fetch('/battery/status');
-        const data = await response.json();
-        
-        const batteryIndicator = document.getElementById('battery-indicator');
-        const batteryPercent = Math.round(data.percent);
-        const batteryStatus = data.status;
-        
-        // Create battery icon based on percentage
-        let batteryColor = '#10a37f'; // Default green
-        if (batteryPercent < 20) {
-          batteryColor = '#f44336'; // Red for low battery
-        } else if (batteryPercent < 50) {
-          batteryColor = '#ff9800'; // Orange for medium battery
-        }
-        
-        const charging = batteryStatus === 'charging' ? '⚡' : '';
-        
-        batteryIndicator.innerHTML = `
-          <div class="battery-status">
-            <span class="battery-icon" style="color: ${batteryColor};">🔋</span>
-            <span>${batteryPercent}% ${charging}</span>
-          </div>
-        `;
-      } catch (error) {
-        console.error('Error fetching battery status:', error);
-      }
+        const res = await fetch('/battery/status');
+        const d = await res.json();
+        const pct = Math.round(d.percent);
+        const charging = d.status === 'charging' ? ' ⚡' : '';
+        const color = pct < 20 ? '#ef4444' : pct < 50 ? '#f59e0b' : '#10a37f';
+        document.getElementById('battery-indicator').innerHTML =
+          `<div class="battery-pill">🔋 <span style="color:${color};font-weight:600">${pct}%</span>${charging}</div>`;
+      } catch(e) {}
     }
-    
-    // Helper function to escape HTML to prevent XSS
+
     function escapeHTML(str) {
-      return str
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
+      return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                .replace(/"/g,'&quot;').replace(/'/g,'&#039;');
     }
   </script>
 </body>

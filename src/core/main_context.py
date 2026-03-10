@@ -1,7 +1,7 @@
 # core/main_context.py
 
 # Globale variabelen die je tools kunnen gebruiken
-GLOBAL_PROFILE_ID = 3
+GLOBAL_PROFILE_ID = 84
 
 MQTT_AGENT = None
 
@@ -11,3 +11,4 @@ def set_mqtt_agent(agent):
 
 def get_mqtt_agent():
     return MQTT_AGENT
+

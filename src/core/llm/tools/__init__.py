@@ -11,3 +11,4 @@ import core.llm.tools.battery_utility_tool
 import core.llm.tools.time_tool
 import core.llm.tools.profile_tool
 import core.llm.tools.chronos_tool
+import core.llm.tools.example_D31_tool

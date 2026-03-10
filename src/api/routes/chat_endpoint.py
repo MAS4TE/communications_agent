@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Request
 
 from ..models.chat import ChatRequest, ChatResponse
 from ..services.chat.chat_service import ChatService
-from core.llm.prompts import BATTERY_ASSISTANT_PROMPT
+from core.llm.prompts import BATTERY_ASSISTANT_PROMPT, build_system_message
 
 
 router = APIRouter(tags=["chat"])
@@ -14,7 +14,7 @@ def get_chat_service(request: Request) -> ChatService:
     """Dependency that provides ChatService initialized with LLM from app state."""
     return ChatService(
         llm=request.app.state.llm, 
-        prompt=BATTERY_ASSISTANT_PROMPT.system_message
+        prompt=build_system_message()#BATTERY_ASSISTANT_PROMPT.system_message
     )
 
 

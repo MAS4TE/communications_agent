@@ -60,7 +60,7 @@ async def step_fc_demand(data):
 
     # Call the tool
     demand_fc = forecast_timeseries_from_csv(
-        csv_path="data/profile_data/profile_3_demand.csv",
+        csv_path="data/profile_data/profile_{GLOBAL_PROFILE_ID}_demand.csv",
         start=start,
         end=end,
         history_days=1,
@@ -92,7 +92,7 @@ async def step_fc_solar(data):
 
     # Call the tool
     solar_fc = forecast_timeseries_from_csv(
-        csv_path="data/profile_data/profile_3_solar.csv",
+        csv_path="data/profile_data/profile_{GLOBAL_PROFILE_ID}_solar.csv",
         start=start,
         end=end,
         history_days=1,
@@ -329,12 +329,12 @@ STEP_MAP = {
     # time_tool_step, 
     # step2, 
     step_market_open, 
-    step_retrieve_market_info, 
-    step_fc_demand, 
-    step_fc_solar, 
-    step_fc_prices, 
-    step_battery_utility_calculator, 
-    step_publish_bid, 
+    # step_retrieve_market_info, 
+    # step_fc_demand, 
+    # step_fc_solar, 
+    # step_fc_prices, 
+    # step_battery_utility_calculator, 
+    # step_publish_bid, 
     step3
     ], 
     "market_clearing":[

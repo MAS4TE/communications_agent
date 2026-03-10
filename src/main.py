@@ -82,6 +82,31 @@ async def lifespan(app: FastAPI):
 
     yield
 
+# def run_app():
+#     # Create FastAPI app with lifespan
+#     app = FastAPI(
+#         title="Solar Battery Assistant API",
+#         description="API for monitoring and interacting with a solar battery system, including both direct data access and a conversational assistant interface.",
+#         version="0.1.0",
+#         lifespan=lifespan,
+#         openapi_tags=[
+#             {"name": "battery", "description": "Operations related to battery monitoring and status"},
+#             {"name": "chat", "description": "Chat interface with AI assistant for natural language interactions"}
+#         ]
+#     )
+
+#     # Mount static files directoryls
+#     project_root = os.path.dirname(__file__)
+#     static_dir = os.path.join(project_root, "static")
+
+#     if not os.path.isdir(static_dir):
+#         raise RuntimeError(f"Static directory not found at {static_dir}")
+
+#     app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+#     # Include API routes
+#     app.include_router(api_router)
+
 # Create FastAPI app with lifespan
 app = FastAPI(
     title="Solar Battery Assistant API",
