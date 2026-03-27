@@ -6,8 +6,10 @@ from api.services.prosumer.prosumer_service import ProsumerService
 router = APIRouter(tags=["preferences"])
 
 class PreferencesRequest(BaseModel):
-    risk: str
-    trading_preference: str
+    # risk: str
+    trading_preference:str
+    battery_tradeable_pct: int
+    expertise: str
 
 @router.get("/prosumer/preferences")
 def get_prefs():
@@ -17,5 +19,5 @@ def get_prefs():
 @router.post("/prosumer/preferences")
 def save_prefs(prefs: PreferencesRequest):
     service = ProsumerService()
-    service.save_preferences(prefs.risk, prefs.trading_preference)
+    service.save_preferences(prefs.trading_preference, prefs.battery_tradeable_pct, prefs.expertise)#(prefs.risk, prefs.trading_preference, prefs.expertise)
     return {"status": "ok"}

@@ -5,8 +5,10 @@ from core.main_context import GLOBAL_PROFILE_ID
 
 # In-memory preferences
 _preferences = {
-    "risk": "Medium",
-    "trading_preference": "Profit"
+    # "risk": "Medium",
+    "trading_preference": "Profit", 
+    "battery_tradeable_pct": 80,
+    "expertise":"Beginner"
 }
 
 class ProsumerService:
@@ -18,6 +20,8 @@ class ProsumerService:
     def get_preferences(self):
         return _preferences
 
-    def save_preferences(self, risk: str, trading_preference: str):
-        _preferences["risk"] = risk
+    def save_preferences(self, trading_preference: str, battery_tradeable_pct:int, expertise:str):#(self, risk: str, trading_preference: str, expertise: str):
+        # _preferences["risk"] = risk
         _preferences["trading_preference"] = trading_preference
+        _preferences["battery_tradeable_pct"] = battery_tradeable_pct
+        _preferences["expertise"] = expertise

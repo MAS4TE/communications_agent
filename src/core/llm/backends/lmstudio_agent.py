@@ -6,8 +6,16 @@ from typing import Optional, List
 from ..interfaces.agent import AgentLLM
 from core.llm.tools.registry import tool_registry
 
-
 from utils.ansi import BOLD_BLUE, BOLD_GREEN, RESET
+
+
+# Tools that are only used by the pipeline and should never be exposed to the
+# chatbot. LMStudio 1.5.0 now introspects raw function signatures, and these
+# tools have pandas Series parameters that it can't parse into a JSON schema.
+PIPELINE_ONLY_TOOLS = {
+    "battery_utility_calculator",
+    "forecast_timeseries_from_csv",
+}
 
 
 class LMStudioAgent(AgentLLM):
@@ -16,13 +24,26 @@ class LMStudioAgent(AgentLLM):
     def __init__(self, model_name: str = "qwen2.5-7b-instruct-1m"):
         self.model_name = model_name
         self._model = lms.llm(model_name)
-        
+
         self.messages: List[dict] = []
         self._chat = lms.Chat()
         self.response_chunks = []
 
-        self.tools_to_use = tool_registry.tools
-        self.tool_schemas = tool_registry.schemas
+        # Filter out pipeline-only tools — the chatbot should never call these
+        # directly. They have complex parameter types (pandas Series) that
+        # LMStudio 1.5.0 can't parse when introspecting function signatures.
+        self.tools_to_use = [
+            t for t in tool_registry.tools
+            if t.__name__ not in PIPELINE_ONLY_TOOLS
+        ]
+        self.tool_schemas = [
+            s for s in tool_registry.schemas
+            if s.get("function", {}).get("name") not in PIPELINE_ONLY_TOOLS
+        ]
+
+        print(f"LMStudioAgent: loaded {len(self.tools_to_use)} chatbot tools:")
+        for t in self.tools_to_use:
+            print(f"  - {t.__name__}")
 
     @property
     def llm(self):
@@ -57,7 +78,6 @@ class LMStudioAgent(AgentLLM):
         # Add messages to chat
         for msg in messages:
             if msg["role"] == "system":
-                # Handle system messages as special user messages
                 self._chat.add_user_message(f"System: {msg['content']}")
             elif msg["role"] == "user":
                 self._chat.add_user_message(msg["content"])

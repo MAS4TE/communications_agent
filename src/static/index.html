@@ -168,6 +168,70 @@
     }
     .pref-summary span { font-weight: 600; color: var(--text); }
 
+    /* ── BATTERY RESERVE SLIDER ── */
+    #battery-reserve-section {
+      display: none; /* shown dynamically when profile has battery */
+    }
+    .reserve-slider-wrap { padding: 0 2px; }
+    .reserve-track {
+      position: relative; height: 10px;
+      background: var(--border); border-radius: 6px;
+      overflow: visible; margin: 0 4px;
+    }
+    /* the "keep" zone fills from left */
+    .reserve-keep-fill {
+      position: absolute; left: 0; top: 0; height: 100%;
+      background: #10a37f; border-radius: 6px 0 0 6px;
+      transition: width 0.2s ease;
+      pointer-events: none;
+    }
+    /* the "tradeable" zone fills from keep to right */
+    .reserve-trade-fill {
+      position: absolute; top: 0; height: 100%;
+      background: #6366f1; border-radius: 0 6px 6px 0;
+      transition: left 0.2s ease, width 0.2s ease;
+      pointer-events: none;
+    }
+    .reserve-thumb {
+      position: absolute; top: 50%; transform: translate(-50%, -50%);
+      width: 20px; height: 20px; border-radius: 50%;
+      background: white; border: 2.5px solid #10a37f;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+      transition: left 0.2s ease;
+      pointer-events: none;
+      z-index: 2;
+    }
+    .reserve-range {
+      position: absolute; top: 50%; left: 0; right: 0;
+      transform: translateY(-50%);
+      width: 100%; opacity: 0; cursor: pointer;
+      height: 28px; margin: 0; z-index: 3;
+    }
+    .reserve-legend {
+      display: flex; justify-content: space-between;
+      margin-top: 14px; gap: 8px;
+    }
+    .reserve-legend-item {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 0.78rem; color: var(--text-muted);
+    }
+    .reserve-legend-dot {
+      width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0;
+    }
+    .reserve-values {
+      display: flex; justify-content: space-between;
+      margin-top: 10px;
+    }
+    .reserve-val-block { text-align: center; }
+    .reserve-val-number {
+      font-size: 1.1rem; font-weight: 700; font-family: 'DM Mono', monospace;
+    }
+    .reserve-val-label {
+      font-size: 0.7rem; color: var(--text-muted); margin-top: 1px;
+    }
+    .reserve-val-block.keep .reserve-val-number { color: #10a37f; }
+    .reserve-val-block.trade .reserve-val-number { color: #6366f1; }
+
     /* ── FOOTER ── */
     .panel-footer { padding: 16px 20px; border-top: 1px solid var(--border); flex-shrink: 0; }
     #save-prefs {
@@ -249,6 +313,7 @@
       <div id="panel-prefs" class="tab-content">
         <div class="panel-body">
 
+          <!-- RISK SCORE — commented out for now
           <div class="pref-section">
             <label>Risk Score</label>
             <div class="step-slider-wrap">
@@ -260,6 +325,7 @@
               <div class="step-labels" id="risk-labels"></div>
             </div>
           </div>
+          -->
 
           <div class="pref-section">
             <label>Trading Preference</label>
@@ -270,6 +336,54 @@
                 <input type="range" class="step-range" id="pref-range" min="0" max="1" step="1" value="0">
               </div>
               <div class="step-labels" id="pref-labels"></div>
+            </div>
+          </div>
+
+          <!-- EXPERTISE LEVEL — commented out for now -->
+          <div class="pref-section">
+            <label>Expertise Level</label>
+            <div class="step-slider-wrap">
+              <div class="step-track">
+                <div class="step-fill" id="expertise-fill"></div>
+                <div class="step-dots" id="expertise-dots"></div>
+                <input type="range" class="step-range" id="expertise-range" min="0" max="2" step="1" value="0">
+              </div>
+              <div class="step-labels" id="expertise-labels"></div>
+            </div>
+          </div>
+          
+
+          <!-- BATTERY RESERVE — only shown when profile has a home battery -->
+          <div class="pref-section" id="battery-reserve-section">
+            <label>Battery Reserve</label>
+            <div class="reserve-slider-wrap">
+              <div class="reserve-track" id="reserve-track">
+                <div class="reserve-keep-fill"  id="reserve-keep-fill"></div>
+                <div class="reserve-trade-fill" id="reserve-trade-fill"></div>
+                <div class="reserve-thumb"      id="reserve-thumb"></div>
+                <input type="range" class="reserve-range" id="reserve-range"
+                  min="0" max="100" step="5" value="20">
+              </div>
+              <!-- kWh display shown once battery capacity is known -->
+              <div id="reserve-kwh-row" style="display:none; margin-top:6px;">
+                <div style="text-align:center; font-size:0.75rem; color:var(--text-muted);">
+                  Based on your
+                  <span style="font-weight:600; color:var(--text);" id="reserve-capacity-label">—</span>
+                  battery:
+                  keep <span style="font-weight:700; color:#10a37f;" id="reserve-keep-kwh">—</span> kWh ·
+                  trade up to <span style="font-weight:700; color:#6366f1;" id="reserve-trade-kwh">—</span> kWh
+                </div>
+              </div>
+              <div class="reserve-legend">
+                <div class="reserve-legend-item">
+                    <div class="reserve-legend-dot" style="background:#10a37f;"></div>
+                    <span>Keep <strong id="reserve-keep-pct">20%</strong><span id="reserve-keep-label"></span></span>
+                </div>
+                <div class="reserve-legend-item">
+                    <div class="reserve-legend-dot" style="background:#6366f1;"></div>
+                    <span>Trade <strong id="reserve-trade-pct">80%</strong><span id="reserve-trade-label"></span></span>
+                </div>
+            </div>
             </div>
           </div>
 
@@ -313,6 +427,10 @@
             <div class="profile-field-label">Home battery</div>
             <div class="profile-badge" data-value="true" id="profile-battery">Yes</div>
           </div>
+          <div class="profile-field" id="profile-battery-capacity-row" style="display:none;">
+            <div class="profile-field-label">Battery capacity</div>
+            <span class="profile-number" id="profile-battery-capacity">—</span>
+          </div>
           <div class="profile-field">
             <div class="profile-field-label">Electric water heating</div>
             <div class="profile-badge" data-value="false" id="profile-water">No</div>
@@ -326,7 +444,7 @@
   </div>
 
   <script>
-    // ── SLIDERS ──
+    // ── STEP SLIDER DATA (risk & expertise kept for future use) ──
     const RISK_STEPS = [
       { label: 'Low',    color: '#10a37f' },
       { label: 'Medium', color: '#f59e0b' },
@@ -336,14 +454,25 @@
       { label: 'Profit', color: '#6366f1' },
       { label: 'Green',  color: '#22c55e' },
     ];
+    const EXPERTISE_STEPS = [
+      { label: 'Beginner',     color: '#10a37f' },
+      { label: 'Intermediate', color: '#f59e0b' },
+      { label: 'Expert',       color: '#6366f1' },
+    ];
 
-    let riskValue = 1;
-    let prefValue = 0;
+    // commented-out sliders still track state so save payload stays consistent
+    let riskValue      = 1;
+    let prefValue      = 0;
+    let expertiseValue = 0;
+    let batteryReserve = 20;      // % to always keep
+    let batteryCapacityKwh = null; // filled from profile if available
 
+    // ── STEP SLIDER BUILDER ──
     function buildSlider(dotsId, labelsId, fillId, rangeId, steps, getValue, setValue) {
       const dotsEl   = document.getElementById(dotsId);
       const labelsEl = document.getElementById(labelsId);
       const rangeEl  = document.getElementById(rangeId);
+      if (!dotsEl || !labelsEl || !rangeEl) return; // guard for commented-out elements
 
       dotsEl.innerHTML = '';
       steps.forEach((_, i) => {
@@ -386,16 +515,66 @@
       refresh();
     }
 
+    // ── BATTERY RESERVE SLIDER ──
+    function initBatteryReserveSlider() {
+      const rangeEl = document.getElementById('reserve-range');
+      rangeEl.oninput = () => {
+        batteryReserve = parseInt(rangeEl.value);
+        refreshReserve();
+      };
+      refreshReserve();
+    }
+
+    function refreshReserve() {
+      const keep  = batteryReserve;
+      const trade = 100 - keep;
+
+      document.getElementById('reserve-keep-pct').textContent  = keep  + '%';
+      document.getElementById('reserve-trade-pct').textContent = trade + '%';
+
+      document.getElementById('reserve-keep-fill').style.width  = keep  + '%';
+      document.getElementById('reserve-trade-fill').style.left  = keep  + '%';
+      document.getElementById('reserve-trade-fill').style.width = trade + '%';
+      document.getElementById('reserve-thumb').style.left       = keep  + '%';
+
+      // round corners on edge cases
+      const keepFill  = document.getElementById('reserve-keep-fill');
+      const tradeFill = document.getElementById('reserve-trade-fill');
+      keepFill.style.borderRadius  = keep  === 100 ? '6px' : '6px 0 0 6px';
+      tradeFill.style.borderRadius = trade === 100 ? '6px' : '0 6px 6px 0';
+      tradeFill.style.display      = trade === 0 ? 'none' : 'block';
+      keepFill.style.display       = keep  === 0 ? 'none' : 'block';
+
+      // kWh breakdown if capacity is known
+      if (batteryCapacityKwh) {
+        const keepKwh  = ((keep  / 100) * batteryCapacityKwh).toFixed(1);
+        const tradeKwh = ((trade / 100) * batteryCapacityKwh).toFixed(1);
+        document.getElementById('reserve-keep-kwh').textContent  = keepKwh;
+        document.getElementById('reserve-trade-kwh').textContent = tradeKwh;
+      }
+
+      updateSummary();
+    }
+
     function updateSummary() {
-      const r = RISK_STEPS[riskValue].label;
+      // risk and expertise commented out but values still available
       const p = PREF_STEPS[prefValue].label;
-      document.getElementById('pref-summary').innerHTML =
-        `Strategy: <span>${r} risk</span> · <span>${p === 'Green' ? '🌱 Green energy' : '💰 Max profit'}</span>`;
+      let html = `Strategy: <span>${p === 'Green' ? '🌱 Green' : '💰 Profit'}</span>`;
+      // if (document.getElementById('battery-reserve-section').style.display !== 'none') {
+      if (document.getElementById('battery-reserve-section').style.display === 'block') {
+        const trade = 100 - batteryReserve;
+        html += ` · <span>🔋 Keep ${batteryReserve}% · Trade ${trade}%</span>`;
+      }
+      
+      document.getElementById('pref-summary').innerHTML = html;
     }
 
     function initSliders() {
-      buildSlider('risk-dots','risk-labels','risk-fill','risk-range', RISK_STEPS, ()=>riskValue, v=>{riskValue=v;});
+      // risk and expertise sliders are commented out in HTML but kept here for when re-enabled
+      // buildSlider('risk-dots','risk-labels','risk-fill','risk-range', RISK_STEPS, ()=>riskValue, v=>{riskValue=v;});
       buildSlider('pref-dots','pref-labels','pref-fill','pref-range', PREF_STEPS, ()=>prefValue, v=>{prefValue=v;});
+      buildSlider('expertise-dots','expertise-labels','expertise-fill','expertise-range', EXPERTISE_STEPS, ()=>expertiseValue, v=>{expertiseValue=v;});
+      initBatteryReserveSlider();
     }
 
     // ── TABS ──
@@ -417,8 +596,33 @@
         setBadge('profile-solar',    d.solar_panels);
         setBadge('profile-battery',  d.home_battery);
         setBadge('profile-water',    d.electric_water_heating);
-      } catch(e) { /* keep placeholder values until endpoint is ready */ }
+
+        // Battery reserve section: only show if profile has a home battery
+        if (d.home_battery) {
+          document.getElementById('battery-reserve-section').style.display = 'block';
+
+          // If the profile includes battery capacity in kWh, wire it up
+          if (d.battery_capacity_kwh != null) {
+            batteryCapacityKwh = d.battery_capacity_kwh;
+            document.getElementById('reserve-capacity-label').textContent = d.battery_capacity_kwh + ' kWh';
+            document.getElementById('reserve-kwh-row').style.display = 'block';
+            // also show it in the profile tab
+            document.getElementById('profile-battery-capacity-row').style.display = 'flex';
+            document.getElementById('profile-battery-capacity').textContent = d.battery_capacity_kwh + ' kWh';
+          }
+
+          refreshReserve();
+        }
+      } 
+      catch(e) {
+        // Keep placeholder values until endpoint is ready.
+        // For development: simulate a battery profile so the slider is visible.
+        // Remove the block below once the real endpoint is live.
+        document.getElementById('battery-reserve-section').style.display = 'block';
+        refreshReserve();
+      }
     }
+
     function setBadge(id, val) {
       if (val == null) return;
       const el = document.getElementById(id);
@@ -434,8 +638,11 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            risk: RISK_STEPS[riskValue].label,
-            trading_preference: PREF_STEPS[prefValue].label
+            // risk: RISK_STEPS[riskValue].label,         // commented out for now
+            trading_preference: PREF_STEPS[prefValue].label,
+            // battery_reserve_pct: batteryReserve,
+            battery_tradeable_pct: 100 - batteryReserve,
+            expertise: EXPERTISE_STEPS[expertiseValue].label, 
           })
         });
         if (!res.ok) throw new Error();
@@ -476,7 +683,12 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             message: msg,
-            preferences: { risk: RISK_STEPS[riskValue].label, trading_preference: PREF_STEPS[prefValue].label }
+            preferences: {
+              // risk: RISK_STEPS[riskValue].label,    // commented out for now
+              trading_preference: PREF_STEPS[prefValue].label,
+              //battery_reserve_pct: batteryReserve,
+              battery_tradeable_pct: 100 - batteryReserve,
+            }
           })
         });
         const data = await res.json();

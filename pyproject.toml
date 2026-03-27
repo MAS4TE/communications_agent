@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61.5", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mas4te-communication-agent"
+version = "0.1.0"
+description = "MAS4TE communication agent"
+readme = "README.md"
+requires-python = ">=3.8"
+authors = [ { name = "maintainer", email = "maintainer@example.com" } ]
+license = { text = "MIT" }
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["src"]

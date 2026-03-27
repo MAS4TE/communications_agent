@@ -87,7 +87,7 @@ def forecast_from_csv(
     freq = pd.infer_freq(df.index)
     if freq is None:
         print("Could not infer frequency from CSV index, defaulting to 15min")
-        freq = "15T"  # fallback
+        freq = "15min"  # fallback
 
     forecast_index = pd.date_range(start=end, periods=len(response["median"]), freq=freq)
     print("Forecast timestamps sample:", forecast_index[:5])
@@ -172,14 +172,25 @@ def forecast_timeseries_from_csv(
         # print('in if')
         save_median_forecast(result=response, filename=csv_filename)
 
-    # print("after save csv")
+    print('after save csv')
+    try:
+        print(pd.date_range(
+            start=start,
+            periods=len(response["median"]),
+            freq="15min"  # or infer from your CSV
+        ).astype(str).tolist())
+        print("No error occurred")
+    except Exception as e:
+        print("Error occurred:", type(e).__name__, "-", e)
+    print("after save csv")
+    
 
     return {
         "median": response["median"],
         "timestamps": pd.date_range(
             start=start,
             periods=len(response["median"]),
-            freq="15T"  # or infer from your CSV
+            freq="15min"  # or infer from your CSV
         ).astype(str).tolist()
-}
+        }
 
