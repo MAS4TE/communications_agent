@@ -24,6 +24,7 @@ from core.main_context import GLOBAL_PROFILE_ID
 from core.main_context import set_mqtt_agent
 from api.services.chat.chat_service import ChatService
 from core.llm.prompts import build_system_message
+from core.main_context import set_llm
 
 
 
@@ -47,8 +48,11 @@ async def lifespan(app: FastAPI):
     app.state.chat_service = ChatService(
     llm=llm,
     prompt=build_system_message()
-)
+    )
     
+    
+    set_llm(llm)
+
     app.state.settings = settings
 
     # Start CPU logging in background thread

@@ -13,6 +13,9 @@ from datetime import datetime
 from core.llm.tools.chronos_tool import forecast_timeseries_from_csv
 from api.services.prosumer.prosumer_service import ProsumerService
 
+from core.domain.chat_session import SolarChatSession
+from core.main_context import get_llm
+
 
 # ---------------------------------------------------------------------------
 # Bounded thread pool — limits how many CPU-heavy calls run simultaneously.
@@ -81,6 +84,26 @@ async def step1(data):
     data["step1"] = "done"
     print("STEPS: Step 1 completed")
     return data
+
+async def step_test_llm(data):
+    """Simple test step to verify the LLM is accessible from the pipeline."""
+    from core.main_context import get_llm
+    from core.domain.chat_session import SolarChatSession
+
+    llm = get_llm()
+    if llm is None:
+        print("STEPS: step_test_llm — no LLM found, skipping")
+        return data
+
+    print("STEPS: step_test_llm — LLM found, sending test message...")
+
+    session = SolarChatSession(llm=llm, prompt="You are a helpful assistant.")
+    response = await run_blocking(session.process_message, "Say hello in one sentence.")
+
+    print(f"STEPS: step_test_llm — response: {response}")
+    data["llm_test_response"] = response
+    return data
+
 
 
 async def step_retrieve_preferences(data):
@@ -232,6 +255,93 @@ async def step_fc_prices(data):
 
     return data
 
+async def step_reason_buc_range_buy(data):
+    """
+    Ask the LLM to reason about what volume range to run the BUC for.
+ 
+    Uses a fresh isolated session — completely separate from the chatbot's
+    conversation history. The LLM gets demand forecast summary, trading
+    preference, and market window, and returns a min/max volume range + reasoning.
+ 
+    Falls back to range(1, 10) if the LLM call fails or returns invalid JSON.
+    """
+    print("STEPS: step_reason_buc_range started")
+ 
+    llm = get_llm()
+    if llm is None:
+        print("STEPS: no LLM available, using fallback range 1–10")
+        data["buc_min_volume"] = 1
+        data["buc_max_volume"] = 10
+        return data
+ 
+    # Summarise demand forecast so we don't dump a huge series into the prompt
+    demand_fc = data.get("demand_fc")
+    if demand_fc is not None and len(demand_fc) > 0:
+        demand_summary = (
+            f"min={demand_fc.min():.2f} kWh, "
+            f"max={demand_fc.max():.2f} kWh, "
+            f"mean={demand_fc.mean():.2f} kWh "
+            f"over {len(demand_fc)} time steps"
+        )
+    else:
+        demand_summary = "not available"
+ 
+    preferences = data.get("preferences", {})
+    trading_preference = preferences.get("trading_preference", "unknown")
+    market_window = data.get("market_window", {})
+ 
+    prompt = f"""You are an energy trading coach helping a buyer decide how much 
+    storage capacity to bid for in a local energy market. Always respond in English AND ONLY ENGLISH. 
+
+    The buyer does NOT own a battery — they are renting storage capacity from the community.
+
+    Trading preferences explained:
+    - "Profit": minimize electricity costs, bid only what is economically worth it
+    - "Green Energy": maximize use of renewable energy, willing to rent more storage 
+    even if not the most cost-efficient choice
+
+    Available information:
+    - Demand forecast: {demand_summary}
+    - Trading preference: {trading_preference}
+    - Market window: start={market_window.get('start')}, end={market_window.get('end')}
+
+    Based on this, decide a sensible minimum and maximum volume range (in kWh) to run 
+    the BUC for. Minimum must be at least 1 kWh.
+
+    Respond with JSON only:
+    {{"min_volume": <integer>, "max_volume": <integer>, "reasoning": "<brief explanation>"}}"""
+    
+    
+    # Fresh isolated session — does not affect chatbot history
+    session = SolarChatSession(
+        llm=llm,
+        prompt="You are an energy trading assistant. Respond only with valid JSON when asked."
+    )
+ 
+    print("STEPS: asking LLM to reason about BUC volume range...")
+    try:
+        import json as _json
+        response = await run_blocking(session.process_message, prompt)
+        print(f"STEPS: LLM reasoning response:\n{response}\n")
+ 
+        # Strip markdown code fences if present
+        clean = response.strip().replace("```json", "").replace("```", "").strip()
+        decision = _json.loads(clean)
+ 
+        min_vol = max(1, int(decision["min_volume"]))
+        max_vol = max(min_vol, int(decision["max_volume"]))
+ 
+        data["buc_min_volume"] = min_vol
+        data["buc_max_volume"] = max_vol
+        print(f"STEPS: agent decided BUC range: {min_vol}–{max_vol} kWh")
+        print(f"STEPS: reasoning: {decision.get('reasoning', '')}")
+ 
+    except Exception as e:
+        print(f"STEPS: reasoning step failed ({e}), using fallback range 1–10")
+        data["buc_min_volume"] = 1
+        data["buc_max_volume"] = 10
+    print(q)
+    return data
 
 async def step_battery_utility_calculator(data):
     """
@@ -272,15 +382,22 @@ async def step_battery_utility_calculator(data):
     # storage_size_kwh = int(data["storage_size_kwh"])
     
     # storage_size_kwh = int(data["storage_size_kwh"] * (data["battery_tradeable_pct"] / 100))
-    if data.get("storage_size_kwh", 0) > 0:
+    if data.get("storage_size_kwh", 0) > 0: # seller
         storage_size_kwh = int(data["storage_size_kwh"] * (data["battery_tradeable_pct"] / 100))
         print('full storage: ', data["storage_size_kwh"], "% : ", data["battery_tradeable_pct"] / 100, "trade kwh: ", storage_size_kwh)
-    else:
-        storage_size_kwh = 10
-        print('no battery: default range 1-10 kWh')
+    else: #buyer
+        # Goal from trading preference
+        trading_preference = data.get("preferences", {}).get("trading_preference", "Profit")
+        goal = "max_green_energy" if trading_preference == "Green Energy" else "max_cashflow"
+        print(f"STEPS: using goal '{goal}' based on trading preference '{trading_preference}'")
 
-    volumes = range(1, storage_size_kwh + 1)
-    print(f"STEPS: running BUC for volumes 1–{storage_size_kwh} kWh")
+        # Volume range decided by the reasoning step
+        min_volume = data.get("buc_min_volume", 1)
+        max_volume = data.get("buc_max_volume", 10)
+        volumes = range(min_volume, max_volume + 1)
+        print(f"STEPS: running BUC for volumes {min_volume}–{max_volume} kWh | goal={goal}")
+    
+    print(f"STEPS: running BUC for volumes 1–{volumes} kWh")
 
     goal = data["preferences"].get("goal", "max_cashflow")
 
@@ -377,13 +494,15 @@ STEP_MAP = {
         step1,
         step_retrieve_preferences,
         step_retrieve_profile,   # uncomment if needed
+        step_test_llm,
         # time_tool_step,
         # step2,
         step_market_open,
         step_retrieve_market_info,
-        step_fc_demand,           # \
-        step_fc_solar,            #  > these now run sequentially but each
-        step_fc_prices,           # /  is non-blocking (thread-pool offloaded)
+        step_fc_demand,           
+        step_fc_solar,            
+        step_fc_prices,     
+        step_reason_buc_range_buy,      
         step_battery_utility_calculator,
         # step_publish_bid,        # uncomment when ready
         step3,
