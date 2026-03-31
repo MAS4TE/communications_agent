@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Pipeline Viewer</title>
+
+  <style>
+    body {
+      font-family: Arial;
+      padding: 20px;
+    }
+
+    .bar {
+      width: 100%;
+      background: #eee;
+      height: 20px;
+      border-radius: 10px;
+      margin: 10px 0;
+      overflow: hidden;
+    }
+
+    .fill {
+      height: 100%;
+      background: #4caf50;
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+
+    .step {
+      padding: 6px;
+      margin: 4px 0;
+      border-radius: 6px;
+      font-family: monospace;
+    }
+
+    .done {
+      background: #c8f7c5;
+    }
+
+    .current {
+      background: #ffd27d;
+      font-weight: bold;
+    }
+
+    .pending {
+      background: #f3f3f3;
+      color: #888;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h2>Pipeline Viewer</h2>
+
+  <div class="bar">
+    <div id="bar" class="fill"></div>
+  </div>
+
+  <div id="progress"></div>
+
+  <hr>
+
+  <div id="steps"></div>
+
+<script>
+async function refresh() {
+  try {
+    const res = await fetch("/pipeline/status");
+    const data = await res.json();
+
+    // --- progress bar ---
+    const percentage = data?.progress?.percentage ?? 0;
+    document.getElementById("bar").style.width = percentage + "%";
+
+    document.getElementById("progress").innerHTML =
+      `Progress: ${data?.progress?.completed_steps ?? 0} / ${data?.progress?.total_steps ?? 0} (${percentage}%)`;
+
+    // --- steps rendering ---
+    let html = "";
+
+    const doneSet = new Set(Object.keys(data?.done || {}));
+    const steps = data?.steps || [];
+
+    steps.forEach(step => {
+      let symbol = "○";
+      let cls = "pending";
+
+      if (doneSet.has(step)) {
+        symbol = "✔";
+        cls = "done";
+      }
+
+      if (step === data?.current) {
+        symbol = "→";
+        cls = "current";
+      }
+
+      html += `<div class="step ${cls}">${symbol} ${step}</div>`;
+    });
+
+    document.getElementById("steps").innerHTML = html;
+
+  } catch (err) {
+    console.error("Pipeline viewer error:", err);
+  }
+}
+
+setInterval(refresh, 500);
+refresh();
+</script>
+
+</body>
+</html>

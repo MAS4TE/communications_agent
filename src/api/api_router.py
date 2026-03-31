@@ -9,6 +9,7 @@ from .routes.cpu_endpoint import router as cpu_router
 from .routes.forecast_custom import router as forecast_custom
 from .routes.preferences_endpoint import router as preferences_router
 from .routes.profile_endpoint import router as profile_router
+from .routes.pipeline_endpoint import router as pipeline_router
 
 # Main API router
 api_router = APIRouter()
@@ -21,3 +22,4 @@ api_router.include_router(cpu_router)
 api_router.include_router(forecast_custom)
 api_router.include_router(preferences_router)
 api_router.include_router(profile_router)
+api_router.include_router(pipeline_router)
