@@ -1,7 +1,12 @@
 # core/main_context.py
 
+import os
+
 # Globale variabelen die je tools kunnen gebruiken
-GLOBAL_PROFILE_ID = 3#84
+# buy: 152, 3
+# sell: 84, 92
+# GLOBAL_PROFILE_ID = 152
+GLOBAL_PROFILE_ID = int(os.environ.get("PROFILE_ID", 84))
 
 MQTT_AGENT = None
 LLM = None

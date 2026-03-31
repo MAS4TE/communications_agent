@@ -1,4 +1,32 @@
 """Main FastAPI application."""
+"""
+How to run? 
+Open a terminal per agent (for now)
+
+Windows: 
+Agent 1: Buy
+set PROFILE_ID=3
+set AGENT_ID=B_01
+uvicorn main:app --port 8002
+
+Agent 2: Buy
+set PROFILE_ID=152
+set AGENT_ID=B_02
+uvicorn main:app --port 8003
+
+Agent 1: Sell
+set PROFILE_ID = 84
+set AGENT_ID=S_01
+uvicorn main:app --port 8004
+
+Agent 2: Sell
+set PROFILE_ID = 92
+set AGENT_ID=S_02
+uvicorn main:app --port 8005
+
+
+"""
+
 from contextlib import asynccontextmanager
 import os
 import threading
@@ -34,6 +62,10 @@ settings = Settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # --- Startup logic ---
+    profile_id = int(os.environ.get("PROFILE_ID", 152))
+    agent_id = os.environ.get("AGENT_ID", "B_01")
+    app.state.profile_id = profile_id
+    app.state.agent_id = agent_id
     # Initialize LLM
     factory = LLMFactory()
     config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), settings.LLM_CONFIG_PATH)
@@ -85,7 +117,7 @@ async def lifespan(app: FastAPI):
     mqtt_agent = MqttAgent(
             broker="localhost", 
             port = 1883,
-            agent_id = "B_01",
+            agent_id = agent_id,
             pipeline_manager=pipeline, 
             loop = loop
     )

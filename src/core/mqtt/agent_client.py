@@ -66,17 +66,13 @@ class MqttAgent:
 
 
 
-    def send_bid_to_market(self, bid_id, bid_volume, bid_price):
+    def send_orderbook_to_market(self, orderbook):
         """
-        Sends a bid to the given MQTT topic
+        Sends an orderbook to the given MQTT topic
         """
-        payload = {
-            "bid_id": bid_id, 
-            "price": bid_price, 
-            "quantity": bid_volume
-        }
-        self.client.publish(self.topic_bids, json.dumps(payload))
-        print(f"Agent {self.agent_id} sent bid: {payload} to topic {self.topic_bids}")
+
+        self.client.publish(self.topic_bids, json.dumps(orderbook))
+        print(f"Agent {self.agent_id} sent orderbook: {orderbook} to topic {self.topic_bids}")
 
     
 
