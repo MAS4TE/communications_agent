@@ -16,13 +16,15 @@ class PipelineTracker:
         self.current = None      # name of the step currently running
         self.current_start = None
         self.done = {}           # { step_name: duration_seconds }
-        self.status = "idle"     # idle | running | done | failed
+        self.status = "Waiting for market opening"     # idle | running | done | failed
+        self.message = "Waiting for market_open trigger..."
 
     def start_job(self, job_type: str, step_names: list):
         self.reset()
         self.job_type = job_type
         self.steps = list(step_names)
         self.status = "running"
+        self.message = None
 
     def begin(self, name: str):
         self.current = name
@@ -36,6 +38,8 @@ class PipelineTracker:
     def finish_job(self, status: str = "done"):
         self.current = None
         self.status = status
+        if status == "done":
+            self.message = "Waiting for next market message"
 
     def snapshot(self) -> dict:
         """Return a JSON-serialisable snapshot of the current state."""
@@ -57,6 +61,7 @@ class PipelineTracker:
             "current": self.current,
             "current_duration": active_duration,
             "done": self.done,
+            "message":self.message,
         }
 
 

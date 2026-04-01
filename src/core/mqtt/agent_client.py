@@ -75,4 +75,10 @@ class MqttAgent:
         print(f"Agent {self.agent_id} sent orderbook: {orderbook} to topic {self.topic_bids}")
 
     
-
+    def send_power_request_to_battery(self, power_request: dict):
+        """
+        Sends a power request schedule to the battery controller.
+        """
+        topic = "mas4te/battery-storage/power_request"
+        self.client.publish(topic, json.dumps(power_request))
+        print(f"Agent {self.agent_id} sent power request to topic {topic}")

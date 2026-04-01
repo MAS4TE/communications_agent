@@ -101,6 +101,7 @@ def battery_utility_calculator(
     wholesale_prices=None,
     solver: str = "appsi_highs",
     goal: str = "max_cashflow",
+    return_charge_timeseries: bool = False,
 ):
     """
     Calculate the utility of a battery using sample or provided energy data.
@@ -136,6 +137,7 @@ def battery_utility_calculator(
             wholesale_prices=wholesale,
             solver=solver,
             goal=goal,
+            return_charge_timeseries=return_charge_timeseries,
         )
     except Exception as e:
         print("Exception in battery_calc_service.calculate!")

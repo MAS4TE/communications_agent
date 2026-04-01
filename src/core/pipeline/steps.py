@@ -38,6 +38,27 @@ async def run_blocking(fn, *args, **kwargs):
     return await loop.run_in_executor(THREAD_POOL, partial(fn, *args, **kwargs))
 
 
+async def soc_to_power_request(buc_soc_series: dict) -> dict:
+    """
+    Sum SOC series across all volumes and convert to a power request.
+    Returns a dict with time_steps (seconds from start) and power_rate_w.
+    """
+    # Sum all SOC series into one
+    all_socs = pd.concat(buc_soc_series.values(), axis=1)
+    soc_total = all_socs.sum(axis=1)
+
+    dt_hours = 0.25  # 15-min timesteps
+    power_kw = soc_total.diff() / dt_hours
+    power_kw = power_kw.fillna(0)
+    power_w = power_kw * 1000
+
+    time_steps_s = (soc_total.index - soc_total.index[0]).total_seconds().astype(int)
+
+    return {
+        "time_steps": time_steps_s.tolist(),
+        "power_rate_w": power_w.tolist(),
+    }
+
 def retrieve_step_map():
     return STEP_MAP
 
@@ -392,16 +413,39 @@ async def step_battery_utility_calculator(data):
         print(f"STEPS: running BUC for volumes {min_volume}–{max_volume} kWh | goal={goal}")
 
     buc_results = {}
+    buc_soc_series = {}
+
     for volume in volumes:
         result = await run_blocking(
             buc_tool,
             storage_size_kwh=volume,
             goal=goal,
+            return_charge_timeseries=True, #battery mqtt
             **common_kwargs,
         )
         buc_results[volume] = result
 
+        # extract SOC
+        df = result["storage_to_calc_charge_ts"]
+        df["soc_total"] = df.sum(axis=1)
+        buc_soc_series[volume] = df["soc_total"]
+
     print('buc_results ', buc_results)
+
+    data["buc_soc_series"] = buc_soc_series
+    print(buc_soc_series)
+
+    print("STEPS: buc_soc_series sample:")
+    for vol, soc in buc_soc_series.items():
+        print(f"  volume {vol} kWh — {len(soc)} timesteps, head: {soc.head()}")
+        if buc_soc_series[volume].eq(0).all():
+            print(f"  WARNING: volume {volume} kWh — soc_total is ALL ZEROS")
+        else:
+            print(f"  OK: volume {volume} kWh — soc_total has non-zero values")
+    
+    
+    # print(q)
+
 
     # print('buc results: ', buc_results)
     def _print_buc_results(buc_results: dict):
@@ -487,6 +531,28 @@ async def step_publish_bid(data):
     print("STEPS: bid published successfully")
     return data
 
+async def step_publish_battery_schedule(data):
+    print("STEPS: step_publish_battery_schedule started")
+
+    if data.get("storage_size_kwh", 0) <=0:
+        print('STEPS: not a seller, skipping battery schedule publishing')
+        # maybe change this after discussion with C on when to calculate this and where to actually send it
+        return data
+
+    buc_soc_series = data.get("buc_soc_series")
+    if not buc_soc_series:
+        print("STEPS: no buc_soc_series found, skipping")
+        return data
+
+    power_request = await soc_to_power_request(buc_soc_series)
+    print(f"STEPS: power request — {len(power_request['time_steps'])} timesteps, first power: {power_request['power_rate_w'][0]:.2f} W")
+
+    mqtt_agent = get_mqtt_agent()
+    mqtt_agent.send_power_request_to_battery(power_request)
+
+    print("STEPS: battery schedule published successfully")
+    return data
+
 
 # ---------------------------------------------------------------------------
 # STEPS — debug / utility
@@ -546,7 +612,8 @@ STEP_MAP = {
         # step_reason_buc_range_buy,      
         step_battery_utility_calculator,
         step_set_make_orderbook,
-        step_publish_bid,        # uncomment when ready
+        step_publish_bid,        
+        step_publish_battery_schedule,
         step3,
     ],
     "market_clearing": [

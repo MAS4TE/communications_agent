@@ -75,6 +75,13 @@ async function refresh() {
     document.getElementById("progress").innerHTML =
       `Progress: ${data?.progress?.completed_steps ?? 0} / ${data?.progress?.total_steps ?? 0} (${percentage}%)`;
 
+    // --- waiting message ---
+    if (data.status !== "running") {
+    document.getElementById("steps").innerHTML =
+      `<div style="padding:10px; font-style:italic;">⏸ ${data.message || "Idle..."}</div>`;
+    return;
+  }
+
     // --- steps rendering ---
     let html = "";
 
