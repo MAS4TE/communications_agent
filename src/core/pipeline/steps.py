@@ -16,6 +16,7 @@ from api.services.prosumer.prosumer_service import ProsumerService
 from core.domain.chat_session import SolarChatSession
 from core.main_context import get_llm
 
+from battery_utility_calculator import calculate_bidding_curve
 
 # ---------------------------------------------------------------------------
 # Bounded thread pool — limits how many CPU-heavy calls run simultaneously.
@@ -366,12 +367,65 @@ async def step_reason_buc_range_buy(data):
 
 async def step_battery_utility_calculator(data):
     """
-    Run the Battery Utility Calculator for every storage volume from 1 kWh
-    up to the prosumer's actual battery size percentage allowed.
-    """
-    print("STEPS: step_battery_utility_calculator started")
+    Run the Battery Utility Calculator (BUC) across all tradeable volumes and
+    produce a bidding curve for market submission.
 
-    # Prepare inputs
+    --- Conceptual overview ---
+
+    Worth is always defined as: worth = cost(baseline) - cost(candidate)
+    A positive worth means the candidate storage makes the prosumer better off.
+
+    The baseline differs by role:
+
+      SELLER (has a real battery, renting out part of it):
+        - Baseline  = full battery used entirely for self-consumption
+        - Candidate = full battery minus N kWh (what they keep after renting out N)
+        - Worth     = how much worse off they are by giving away N kWh
+                    = the minimum price they should accept for N kWh
+        - Loop      : N goes from 1 up to max_tradeable kWh (in steps of 1)
+        - Curve     : seller side — sorted descending by volume (highest value first)
+
+      BUYER (no battery, paying to use virtual storage):
+        - Baseline  = no storage (0 kWh), buying all energy from the grid
+        - Candidate = N kWh of virtual storage
+        - Worth     = energy cost saving from having N kWh available
+                    = the maximum price they should be willing to pay for N kWh
+        - Loop      : N goes from min_volume to max_volume (LLM-reasoned range)
+        - Curve     : buyer side — sorted ascending by volume (cheapest first)
+
+    --- Bidding curve construction ---
+
+    Worth values collected across volumes are cumulative (each is vs the same baseline).
+    calculate_bidding_curve() diffs consecutive worth values to get the marginal price
+    per 1 kWh step, i.e.:
+
+        marginal_price(step N) = worth(N kWh) - worth(N-1 kWh)
+
+    This marginal price per kWh is the actual bid price submitted to the market.
+
+    Args:
+        data (dict): Pipeline data dict. Expected keys:
+            'demand_fc'              : demand forecast timeseries
+            'solar_fc'               : solar generation forecast timeseries
+            'prices_fc'              : dict with 'supplier', 'eeg', 'community', 'wholesale'
+            'storage_size_kwh'       : full battery size in kWh (sellers only, >0)
+            'battery_tradeable_pct'  : percentage of battery available to trade (sellers)
+            'preferences'            : dict with 'goal' (sellers) or 'trading_preference' (buyers)
+            'buc_min_volume'         : min volume in kWh to evaluate (buyers, set by LLM)
+            'buc_max_volume'         : max volume in kWh to evaluate (buyers, set by LLM)
+
+    Returns:
+        dict: Updated data dict with added keys:
+            'bidding_curve'  : pd.DataFrame with columns
+                               [volume, cumulative_volume, marginal_price, marginal_price_per_kwh]
+            'buc_soc_series' : dict mapping volume (int) → SOC timeseries (pd.Series),
+                               retained for future MQTT battery scheduling
+    """
+    print("=" * 60)
+    print("STEPS: step_battery_utility_calculator started")
+    print("=" * 60)
+
+    # --- Prepare input timeseries ---
     demand_series    = _to_1d(data.get("demand_fc"))
     solar_series     = _to_1d(data.get("solar_fc"))
     grid_prices      = _to_1d(data.get("prices_fc", {}).get("supplier"))
@@ -383,6 +437,7 @@ async def step_battery_utility_calculator(data):
         t for t in tool_registry.tools if t.__name__ == "battery_utility_calculator"
     )
 
+    # These kwargs are the same for every BUC call — only baseline/candidate change per volume
     common_kwargs = dict(
         demand_series=demand_series,
         solar_series=solar_series,
@@ -392,124 +447,384 @@ async def step_battery_utility_calculator(data):
         wholesale_prices=wholesale_prices,
     )
 
+    # --- Determine role, volumes, and baseline ---
     if data.get("storage_size_kwh", 0) > 0:  # seller
-        tradeable_pct = data.get("battery_tradeable_pct", 50)  # fallback to 100%
-        storage_size_kwh = int(data["storage_size_kwh"] * (tradeable_pct / 100))
-        print('full storage: ', data["storage_size_kwh"], "% : ", tradeable_pct / 100, "trade kwh: ", storage_size_kwh)
-        volumes = range(1, storage_size_kwh + 1)
-        goal = data["preferences"].get("goal", "max_cashflow")
-
-    else:  # buyer — ask LLM to reason about volume range first
         trading_preference = data.get("preferences", {}).get("trading_preference", "Profit")
-        goal = "max_green_energy" if trading_preference == "Green Energy" else "max_cashflow"
+        full_battery_kwh = data["storage_size_kwh"]
+        tradeable_pct = data.get("preferences", {}).get("battery_tradeable_pct", 50)
+        max_tradeable    = int(full_battery_kwh * (tradeable_pct / 100))
+        goal               = "max_green_energy" if trading_preference == "Green Energy" else "max_cashflow"
+        side             = "seller"
+
+        # Each step N: seller offers N kWh, keeps (full_battery - N) for themselves
+        volumes = range(1, max_tradeable + 1)
+
+        print(f"  Role             : SELLER")
+        print(f"  Full battery     : {full_battery_kwh} kWh")
+        print(f"  Tradeable        : {tradeable_pct}%  →  max {max_tradeable} kWh offered")
+        print(f"  Baseline         : {full_battery_kwh} kWh  (full battery, self-consuming only)")
+        print(f"  Candidate range  : {full_battery_kwh - max_tradeable} – {full_battery_kwh - 1} kWh kept")
+        print(f"  Goal             : {goal}")
+        print(f"  Volumes to test  : 1 – {max_tradeable} kWh offered ({max_tradeable} steps)")
+        print('full storage: ', full_battery_kwh, "% : ", tradeable_pct / 100, "trade kwh: ", max_tradeable)
+
+        # print(q)
+
+    else:  # buyer
+        trading_preference = data.get("preferences", {}).get("trading_preference", "Profit")
+        goal               = "max_green_energy" if trading_preference == "Green Energy" else "max_cashflow"
+        side               = "buyer"
+
+        print(f"  Role             : BUYER")
+        print(f"  Trading pref     : {trading_preference}  →  goal = {goal}")
+        print(f"  Baseline         : 0 kWh  (no storage)")
         print(f"STEPS: using goal '{goal}' based on trading preference '{trading_preference}'")
 
-        # Inline LLM reasoning for volume range (buyers only)
-        data = await step_reason_buc_range_buy(data)
-
+        # LLM-reasoned volume range — buyer has no battery so we estimate
+        # how much virtual storage would be useful given their demand/solar profile
+        data       = await step_reason_buc_range_buy(data)
         min_volume = data.get("buc_min_volume", 1)
         max_volume = data.get("buc_max_volume", 10)
-        volumes = range(min_volume, max_volume + 1)
+        volumes    = range(min_volume, max_volume + 1)
+
+        print(f"  Candidate range  : {min_volume} – {max_volume} kWh")
+        print(f"  Volumes to test  : {min_volume} – {max_volume} kWh ({max_volume - min_volume + 1} steps)")
         print(f"STEPS: running BUC for volumes {min_volume}–{max_volume} kWh | goal={goal}")
 
-    buc_results = {}
-    buc_soc_series = {}
+        # print(q)
+
+    print()
+
+    # --- BUC loop: one call per volume step ---
+    buc_results    = {}  # volume (int) → {"worth": float, "storage_to_calc_charge_ts": df}
+    buc_soc_series = {}  # volume (int) → SOC timeseries (pd.Series), retained for MQTT scheduling
 
     for volume in volumes:
+        if side == "seller":
+            # Seller's baseline is always their full battery.
+            # Candidate is what remains after renting out `volume` kWh.
+            baseline_kwh  = full_battery_kwh
+            candidate_kwh = full_battery_kwh - volume
+        else:
+            # Buyer's baseline is always no storage.
+            # Candidate is the virtual storage they are considering buying.
+            baseline_kwh  = 0
+            candidate_kwh = volume
+
         result = await run_blocking(
             buc_tool,
-            storage_size_kwh=volume,
+            storage_size_kwh=candidate_kwh,
+            baseline_storage_kwh=baseline_kwh,
             goal=goal,
-            return_charge_timeseries=True, #battery mqtt
+            return_charge_timeseries=True,  # needed for SOC tracking and future MQTT scheduling
             **common_kwargs,
         )
         buc_results[volume] = result
 
-        # extract SOC
+        # Extract and store SOC timeseries for this volume
         df = result["storage_to_calc_charge_ts"]
-        df["soc_total"] = df.sum(axis=1)
+        df["soc_total"] = df.sum(axis=1)  # sum across charge columns to get total SOC
         buc_soc_series[volume] = df["soc_total"]
 
+        worth       = result["worth"]
+        soc_nonzero = (df["soc_total"] != 0).sum()
+        print(
+            f"  [BUC] offer {volume:>3} kWh  |  "
+            f"candidate={candidate_kwh} kWh  baseline={baseline_kwh} kWh  |  "
+            f"worth = {worth:+.4f} EUR  |  "
+            f"SOC non-zero timesteps: {soc_nonzero}/{len(df)}"
+        )
+
+    # Original SOC diagnostic prints — useful for catching all-zero SOC issues
+    # which indicate the optimizer is not using the storage at all
     print('buc_results ', buc_results)
-
-    data["buc_soc_series"] = buc_soc_series
     print(buc_soc_series)
-
     print("STEPS: buc_soc_series sample:")
     for vol, soc in buc_soc_series.items():
         print(f"  volume {vol} kWh — {len(soc)} timesteps, head: {soc.head()}")
-        if buc_soc_series[volume].eq(0).all():
-            print(f"  WARNING: volume {volume} kWh — soc_total is ALL ZEROS")
+        if buc_soc_series[vol].eq(0).all():
+            print(f"  WARNING: volume {vol} kWh — soc_total is ALL ZEROS")
         else:
-            print(f"  OK: volume {volume} kWh — soc_total has non-zero values")
-    
-    
-    # print(q)
+            print(f"  OK: volume {vol} kWh — soc_total has non-zero values")
 
+    print()
 
-    # print('buc results: ', buc_results)
-    def _print_buc_results(buc_results: dict):
-        print("\n" + "="*60)
-        print("BUC RESULTS SUMMARY")
-        print("="*60)
-        print(f"{'Volume (kWh)':<15} {'Worth (€)':<15} {'Bid Volume':<15} {'Marginal Price (€)':<20} {'€/kWh':<10}")
-        print("-"*60)
-        for volume, result in buc_results.items():
-            worth = result["single_worth"]
-            curve = result["bidding_curve"]
-            bid_volume = curve["volume"][0]
-            marginal_price = curve["marginal_price"][0]
-            price_per_kwh = curve["marginal_price_per_kwh"][0]
-            print(f"{volume:<15} {worth:<15.4f} {bid_volume:<15.2f} {marginal_price:<20.4f} {price_per_kwh:<10.4f}")
-        print("="*60 + "\n")
+    # --- Build bidding curve from collected worth values ---
+    # Worth values are cumulative (each volume is compared to the same baseline).
+    # calculate_bidding_curve diffs them to produce a marginal price per 1 kWh step,
+    # which is the actual price submitted per slot in the market bid.
+    print("STEPS: building bidding curve ...")
 
-    _print_buc_results(buc_results=buc_results)
-    data["buc_results"] = buc_results
-    print("STEPS: END OF BUC")
+    # The baseline row (volume=0, worth=0) is required by calculate_bidding_curve
+    # as the anchor point for the first diff.
+    rows = [{"volume": 0, "worth": 0.0}]
+    for volume, result in buc_results.items():
+        rows.append({"volume": volume, "worth": result["worth"]})
+
+    volumes_worth_df = pd.DataFrame(rows)
+
+    bidding_curve = calculate_bidding_curve(
+        volumes_worth=volumes_worth_df,
+        buy_or_sell_side=side,
+    )
+
+    print()
+    print(f"  {'Step':>4}  {'Volume (kWh)':>12}  {'Cumul. (kWh)':>12}  {'Marginal (EUR)':>14}  {'EUR/kWh':>10}")
+    print(f"  {'-'*4}  {'-'*12}  {'-'*12}  {'-'*14}  {'-'*10}")
+    for i, row in bidding_curve.iterrows():
+        print(
+            f"  {i+1:>4}  "
+            f"{row['volume']:>12.1f}  "
+            f"{row['cumulative_volume']:>12.1f}  "
+            f"{row['marginal_price']:>14.4f}  "
+            f"{row['marginal_price_per_kwh']:>10.4f}"
+        )
+
+    print()
+    print(
+        f"  → {len(bidding_curve)} bid steps | "
+        f"total volume: {bidding_curve['cumulative_volume'].max():.1f} kWh | "
+        f"price range: {bidding_curve['marginal_price_per_kwh'].min():.4f} – "
+        f"{bidding_curve['marginal_price_per_kwh'].max():.4f} EUR/kWh"
+    )
+    print("=" * 60)
+
+    data["bidding_curve"]  = bidding_curve
+    data["buc_soc_series"] = buc_soc_series
+
     return data
 
-async def step_set_make_orderbook(data):
-    print("STEPS: ENTER BUC STEP")
+# async def step_battery_utility_calculator(data):
+#     """
+#     Run the Battery Utility Calculator for every storage volume from 1 kWh
+#     up to the prosumer's actual battery size percentage allowed.
+#     """
+#     print("STEPS: step_battery_utility_calculator started")
 
+#     # Prepare inputs
+#     demand_series    = _to_1d(data.get("demand_fc"))
+#     solar_series     = _to_1d(data.get("solar_fc"))
+#     grid_prices      = _to_1d(data.get("prices_fc", {}).get("supplier"))
+#     eeg_prices       = _to_1d(data.get("prices_fc", {}).get("eeg"))
+#     community_prices = _to_1d(data.get("prices_fc", {}).get("community"))
+#     wholesale_prices = _to_1d(data.get("prices_fc", {}).get("wholesale"))
+
+#     buc_tool = next(
+#         t for t in tool_registry.tools if t.__name__ == "battery_utility_calculator"
+#     )
+
+#     common_kwargs = dict(
+#         demand_series=demand_series,
+#         solar_series=solar_series,
+#         grid_prices=grid_prices,
+#         eeg_prices=eeg_prices,
+#         community_prices=community_prices,
+#         wholesale_prices=wholesale_prices,
+#     )
+
+#     if data.get("storage_size_kwh", 0) > 0:  # seller
+#         tradeable_pct = data.get("battery_tradeable_pct", 50)  # fallback to 100%
+#         storage_size_kwh = int(data["storage_size_kwh"] * (tradeable_pct / 100))
+#         print('full storage: ', data["storage_size_kwh"], "% : ", tradeable_pct / 100, "trade kwh: ", storage_size_kwh)
+#         volumes = range(1, storage_size_kwh + 1)
+#         goal = data["preferences"].get("goal", "max_cashflow")
+#         side = "seller"
+
+#     else:  # buyer — ask LLM to reason about volume range first
+#         trading_preference = data.get("preferences", {}).get("trading_preference", "Profit")
+#         goal = "max_green_energy" if trading_preference == "Green Energy" else "max_cashflow"
+#         print(f"STEPS: using goal '{goal}' based on trading preference '{trading_preference}'")
+
+#         # Inline LLM reasoning for volume range (buyers only)
+#         data = await step_reason_buc_range_buy(data)
+
+#         min_volume = data.get("buc_min_volume", 1)
+#         max_volume = data.get("buc_max_volume", 10)
+#         volumes = range(min_volume, max_volume + 1)
+#         side = "buyer"
+#         print(f"STEPS: running BUC for volumes {min_volume}–{max_volume} kWh | goal={goal}")
+
+#     buc_results = {}
+#     buc_soc_series = {}
+
+#     for volume in volumes:
+#         result = await run_blocking(
+#             buc_tool,
+#             storage_size_kwh=volume,
+#             goal=goal,
+#             return_charge_timeseries=True, #battery mqtt
+#             **common_kwargs,
+#         )
+#         buc_results[volume] = result
+
+#         # extract SOC
+#         df = result["storage_to_calc_charge_ts"]
+#         df["soc_total"] = df.sum(axis=1)
+#         buc_soc_series[volume] = df["soc_total"]
+
+#     print('buc_results ', buc_results)
+
+#     data["buc_soc_series"] = buc_soc_series
+#     print(buc_soc_series)
+
+#     print("STEPS: buc_soc_series sample:")
+#     for vol, soc in buc_soc_series.items():
+#         print(f"  volume {vol} kWh — {len(soc)} timesteps, head: {soc.head()}")
+#         if buc_soc_series[volume].eq(0).all():
+#             print(f"  WARNING: volume {volume} kWh — soc_total is ALL ZEROS")
+#         else:
+#             print(f"  OK: volume {volume} kWh — soc_total has non-zero values")
+    
+    
+#     # print(q)
+
+
+#     # print('buc results: ', buc_results)
+#     # def _print_buc_results(buc_results: dict):
+#     #     print("\n" + "="*60)
+#     #     print("BUC RESULTS SUMMARY")
+#     #     print("="*60)
+#     #     print(f"{'Volume (kWh)':<15} {'Worth (€)':<15} {'Bid Volume':<15} {'Marginal Price (€)':<20} {'€/kWh':<10}")
+#     #     print("-"*60)
+#     #     for volume, result in buc_results.items():
+#     #         worth = result["single_worth"]
+#     #         curve = result["bidding_curve"]
+#     #         bid_volume = curve["volume"][0]
+#     #         marginal_price = curve["marginal_price"][0]
+#     #         price_per_kwh = curve["marginal_price_per_kwh"][0]
+#     #         print(f"{volume:<15} {worth:<15.4f} {bid_volume:<15.2f} {marginal_price:<20.4f} {price_per_kwh:<10.4f}")
+#     #     print("="*60 + "\n")
+
+#     # _print_buc_results(buc_results=buc_results)
+#     # data["buc_results"] = buc_results
+
+#     # --- Build bidding curve ---
+#     print("STEPS: building bidding curve ...")
+
+#     rows = [{"volume": 0, "worth": 0.0}]  # baseline row — worth is 0 by definition
+#     for volume, result in buc_results.items():
+#         rows.append({"volume": volume, "worth": result["worth"]})
+
+#     volumes_worth_df = pd.DataFrame(rows)
+
+#     bidding_curve = calculate_bidding_curve(
+#         volumes_worth=volumes_worth_df,
+#         buy_or_sell_side=side,
+#     )
+
+#     print()
+#     print(f"  {'Step':>4}  {'Cumul. Vol (kWh)':>16}  {'Marginal Price (EUR)':>20}  {'Price per kWh (EUR/kWh)':>23}")
+#     print(f"  {'-'*4}  {'-'*16}  {'-'*20}  {'-'*23}")
+#     for i, row in bidding_curve.iterrows():
+#         print(
+#             f"  {i+1:>4}  "
+#             f"{row['cumulative_volume']:>16.1f}  "
+#             f"{row['marginal_price']:>20.4f}  "
+#             f"{row['marginal_price_per_kwh']:>23.4f}"
+#         )
+
+#     print()
+#     print(f"  → {len(bidding_curve)} bid steps | "
+#           f"total volume: {bidding_curve['cumulative_volume'].max():.1f} kWh | "
+#           f"price range: {bidding_curve['marginal_price_per_kwh'].min():.4f} – "
+#           f"{bidding_curve['marginal_price_per_kwh'].max():.4f} EUR/kWh")
+#     print("=" * 60)
+
+#     data["bidding_curve"]  = bidding_curve
+#     data["buc_soc_series"] = buc_soc_series
+
+#     print("STEPS: END OF BUC")
+#     return data
+
+# async def step_set_make_orderbook(data):
+#     print("STEPS: ENTER BUC STEP")
+
+#     data["bid_id"] = 0 if data.get("bid_id") is None else data["bid_id"] + 1
+
+#     buc_results = data.get("buc_results")
+
+#     if not buc_results:
+#         print("STEPS: NO BUC RESULTS")
+#         data["orderbook"] = []
+#         return data
+
+#     first_key = next(iter(buc_results))
+#     result = buc_results[first_key]
+
+#     print("STEPS: selected volume key:", first_key)
+
+#     curve = result.get("bidding_curve", {})
+
+#     volume_dict = curve.get("volume", {})
+#     price_dict = curve.get("marginal_price_per_kwh", {})
+
+#     if not volume_dict or not price_dict:
+#         print("STEPS: missing curve data")
+#         data["orderbook"] = []
+#         return data
+
+#     v = next(iter(volume_dict.values()))
+#     p = next(iter(price_dict.values()))
+
+#     print("STEPS: extracted v:", v)
+#     print("STEPS: extracted p:", p)
+
+#     data["orderbook"] = [
+#         {
+#             "bid_id": data["bid_id"],
+#             "volume": v,
+#             "price": p
+#         }
+#     ]
+
+#     print("STEPS: FINAL ORDERBOOK:", data["orderbook"])
+
+#     return data
+
+async def step_set_make_orderbook(data):
+    """
+    Build the orderbook from the bidding curve produced by step_battery_utility_calculator.
+
+    Each row in the bidding curve becomes one order in the orderbook, representing
+    one 1-kWh slot at its marginal price. This gives a stepped bid where each
+    additional kWh is priced at its marginal value:
+
+      Sellers: bids are sorted highest price first (most valuable kWh first)
+      Buyers:  bids are sorted lowest price first (cheapest kWh first)
+
+    The orderbook is what gets submitted to the market.
+    """
+    print("STEPS: ENTER MAKE ORDERBOOK STEP")
+
+    # Increment bid_id for this round
     data["bid_id"] = 0 if data.get("bid_id") is None else data["bid_id"] + 1
 
-    buc_results = data.get("buc_results")
+    bidding_curve = data.get("bidding_curve")
 
-    if not buc_results:
-        print("STEPS: NO BUC RESULTS")
+    if bidding_curve is None or bidding_curve.empty:
+        print("STEPS: NO BIDDING CURVE FOUND — orderbook will be empty")
         data["orderbook"] = []
         return data
 
-    first_key = next(iter(buc_results))
-    result = buc_results[first_key]
+    print(f"STEPS: building orderbook from {len(bidding_curve)} curve steps ...")
 
-    print("STEPS: selected volume key:", first_key)
-
-    curve = result.get("bidding_curve", {})
-
-    volume_dict = curve.get("volume", {})
-    price_dict = curve.get("marginal_price_per_kwh", {})
-
-    if not volume_dict or not price_dict:
-        print("STEPS: missing curve data")
-        data["orderbook"] = []
-        return data
-
-    v = next(iter(volume_dict.values()))
-    p = next(iter(price_dict.values()))
-
-    print("STEPS: extracted v:", v)
-    print("STEPS: extracted p:", p)
-
-    data["orderbook"] = [
-        {
-            "bid_id": data["bid_id"],
-            "volume": v,
-            "price": p
+    orderbook = []
+    for i, row in bidding_curve.iterrows():
+        order = {
+            "bid_id":  f"{data['bid_id']}_{i + 1}",    # unique id per bid
+            "slot":    i + 1,                          # 1-based step index
+            "volume":  row["volume"],                  # always 1 kWh per step
+            "price":   row["marginal_price_per_kwh"],  # EUR/kWh for this slot
         }
-    ]
+        orderbook.append(order)
+        print(f"  slot {order['slot']:>3}  |  volume={order['volume']:.1f} kWh  |  price={order['price']:.4f} EUR/kWh")
 
-    print("STEPS: FINAL ORDERBOOK:", data["orderbook"])
+    data["orderbook"] = orderbook
+
+    print(f"STEPS: FINAL ORDERBOOK — {len(orderbook)} bids | "
+          f"total volume: {sum(o['volume'] for o in orderbook):.1f} kWh | "
+          f"price range: {min(o['price'] for o in orderbook):.4f} – "
+          f"{max(o['price'] for o in orderbook):.4f} EUR/kWh")
 
     return data
 

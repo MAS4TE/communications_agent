@@ -8,6 +8,11 @@ import traceback
 
 
 def _ensure_series(data, index):
+    """
+    Converts a plain list or array to a pd.Series with the given index.
+    If data is already a pd.Series, returns it unchanged.
+    This is needed because the LLM passes arrays, but the optimizer expects pd.Series.
+    """
     if isinstance(data, pd.Series):
         return data
     return pd.Series(data, index=index)
@@ -19,60 +24,78 @@ def _ensure_series(data, index):
         "function": {
             "name": "battery_utility_calculator",
             "description": (
-                "Calculate the utility of a battery given its size and time series data. "
-                "Returns baseline cost, optimized cost, cost savings, and a bidding curve. "
+                "Calculate the worth (EUR value) of a candidate battery storage compared "
+                "to a baseline, given energy timeseries and price data. "
+                "Worth = how much better off the prosumer is with the candidate vs baseline. "
+                "For sellers: baseline is their full battery, candidate is what they keep "
+                "after renting out N kWh — worth is their opportunity cost (minimum ask price). "
+                "For buyers: baseline is 0 kWh, candidate is N kWh of virtual storage — "
+                "worth is their cost saving (maximum bid price). "
                 "Use goal='max_cashflow' to minimize electricity costs, or "
-                "goal='max_green_energy' to maximize solar self-consumption regardless of cost."
+                "'max_green_energy' to maximize solar self-consumption."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "storage_size_kwh": {
                         "type": "number",
-                        "description": "Size of the battery in kWh"
+                        "description": (
+                            "Size of the candidate storage in kWh. "
+                            "Sellers: full_battery_kwh - N (what they keep after renting out N kWh). "
+                            "Buyers: N (the virtual storage capacity they are purchasing)."
+                        )
+                    },
+                    "baseline_storage_kwh": {
+                        "type": "number",
+                        "description": (
+                            "Size of the baseline storage in kWh — the reference point for worth. "
+                            "Sellers: their full battery size (reference = keeping everything). "
+                            "Buyers: 0 (reference = no storage at all)."
+                        ),
+                        "default": 0
                     },
                     "demand_series": {
                         "type": "array",
                         "items": {"type": "number"},
-                        "description": "Array of demand values"
+                        "description": "Demand timeseries in kWh per hour."
                     },
                     "solar_series": {
                         "type": "array",
                         "items": {"type": "number"},
-                        "description": "Array of solar generation values"
+                        "description": "Solar generation timeseries in kWh per hour."
                     },
                     "grid_prices": {
                         "type": "array",
                         "items": {"type": "number"},
-                        "description": "Array of grid prices"
+                        "description": "Supplier/grid electricity prices in EUR/kWh."
                     },
                     "eeg_prices": {
                         "type": "array",
                         "items": {"type": "number"},
-                        "description": "Array of EEG prices"
+                        "description": "EEG feed-in prices in EUR/kWh."
                     },
                     "community_prices": {
                         "type": "array",
                         "items": {"type": "number"},
-                        "description": "Array of community market prices"
+                        "description": "Community market prices in EUR/kWh."
                     },
                     "wholesale_prices": {
                         "type": "array",
                         "items": {"type": "number"},
-                        "description": "Array of wholesale market prices"
+                        "description": "Wholesale market prices in EUR/kWh."
                     },
                     "solver": {
                         "type": "string",
-                        "description": "Solver to use (default 'appsi_highs')",
+                        "description": "Solver to use for optimization. Defaults to 'appsi_highs'.",
                         "default": "appsi_highs"
                     },
                     "goal": {
                         "type": "string",
                         "enum": ["max_cashflow", "max_green_energy"],
                         "description": (
-                            "What to optimize for. 'max_cashflow' minimizes total electricity cost. "
-                            "'max_green_energy' maximizes how much of the user's own solar power is "
-                            "consumed directly, even if that costs more money."
+                            "'max_cashflow': minimize total electricity cost. "
+                            "'max_green_energy': maximize solar self-consumption, "
+                            "even if that costs more money."
                         ),
                         "default": "max_cashflow"
                     }
@@ -93,6 +116,7 @@ def _ensure_series(data, index):
 @trace_tool
 def battery_utility_calculator(
     storage_size_kwh: float,
+    baseline_storage_kwh: float = 0,
     demand_series=None,
     solar_series=None,
     grid_prices=None,
@@ -102,33 +126,62 @@ def battery_utility_calculator(
     solver: str = "appsi_highs",
     goal: str = "max_cashflow",
     return_charge_timeseries: bool = False,
-):
+) -> dict:
     """
-    Calculate the utility of a battery using sample or provided energy data.
-    Returns baseline cost, optimized cost, cost savings, and a bidding curve.
+    LLM-callable tool wrapper around BatteryUtilityCalculator.
+
+    Handles array-to-Series conversion and provides fallback sample data
+    for development/testing when real timeseries are not provided.
+
+    This tool should be called once per volume step from the step function.
+    The step function is responsible for:
+      - setting the correct baseline_storage_kwh per role (seller vs buyer)
+      - looping over all volumes
+      - collecting worth values and assembling the bidding curve afterwards
+
+    Args:
+        storage_size_kwh (float): Candidate storage size in kWh.
+        baseline_storage_kwh (float): Baseline storage size in kWh. Defaults to 0.
+        demand_series (list): Demand timeseries in kWh/h.
+        solar_series (list): Solar generation timeseries in kWh/h.
+        grid_prices (list): Grid/supplier prices in EUR/kWh.
+        eeg_prices (list): EEG feed-in prices in EUR/kWh.
+        community_prices (list): Community market prices in EUR/kWh.
+        wholesale_prices (list): Wholesale market prices in EUR/kWh.
+        solver (str): Optimization solver. Defaults to 'appsi_highs'.
+        goal (str): 'max_cashflow' or 'max_green_energy'.
+        return_charge_timeseries (bool): If True, includes charge timeseries
+            in the result for battery MQTT scheduling. Defaults to False.
+
+    Returns:
+        dict with keys:
+            'worth' (float): EUR value of candidate vs baseline.
+            'storage_to_calc_charge_ts' (pd.DataFrame): Only present when
+                return_charge_timeseries=True.
     """
     battery_calc_service = BatteryUtilityCalculator()
 
-    print('in BUC tool, storage size:', storage_size_kwh, '| goal:', goal)
+    print(f"  [BUC tool] candidate={storage_size_kwh} kWh | baseline={baseline_storage_kwh} kWh | goal={goal}")
 
+    # Build a datetime index matching the length of the input timeseries.
+    # Fallback sample data (5 hours) is used when no real data is provided,
+    # e.g. during development or isolated testing.
     n = len(demand_series) if demand_series is not None else 5
     index = pd.date_range("2024-01-01", periods=n, freq="h")
     default_index = pd.date_range("2024-01-01", periods=5, freq="h")
 
-    demand    = _ensure_series(demand_series,    index) if demand_series    is not None else pd.Series([10, 15, 20, 12, 8],              index=default_index)
-    solar     = _ensure_series(solar_series,     index) if solar_series     is not None else pd.Series([5, 8, 12, 10, 3],                index=default_index)
-    grid      = _ensure_series(grid_prices,      index) if grid_prices      is not None else pd.Series([0.12, 0.15, 0.18, 0.14, 0.10],  index=default_index)
-    eeg       = _ensure_series(eeg_prices,       index) if eeg_prices       is not None else pd.Series([0.08, 0.08, 0.08, 0.08, 0.08],  index=default_index)
-    community = _ensure_series(community_prices, index) if community_prices is not None else pd.Series([0.10, 0.11, 0.13, 0.12, 0.09],  index=default_index)
-    wholesale = _ensure_series(wholesale_prices, index) if wholesale_prices is not None else pd.Series([0.06, 0.07, 0.09, 0.08, 0.05],  index=default_index)
-
-    print("About to call battery_calc_service.calculate(...)")
+    demand    = _ensure_series(demand_series,    index) if demand_series    is not None else pd.Series([10, 15, 20, 12, 8],             index=default_index)
+    solar     = _ensure_series(solar_series,     index) if solar_series     is not None else pd.Series([5, 8, 12, 10, 3],               index=default_index)
+    grid      = _ensure_series(grid_prices,      index) if grid_prices      is not None else pd.Series([0.12, 0.15, 0.18, 0.14, 0.10], index=default_index)
+    eeg       = _ensure_series(eeg_prices,       index) if eeg_prices       is not None else pd.Series([0.08, 0.08, 0.08, 0.08, 0.08], index=default_index)
+    community = _ensure_series(community_prices, index) if community_prices is not None else pd.Series([0.10, 0.11, 0.13, 0.12, 0.09], index=default_index)
+    wholesale = _ensure_series(wholesale_prices, index) if wholesale_prices is not None else pd.Series([0.06, 0.07, 0.09, 0.08, 0.05], index=default_index)
 
     start_time = time.time()
-
     try:
         result = battery_calc_service.calculate(
             storage_size_kwh=storage_size_kwh,
+            baseline_storage_kwh=baseline_storage_kwh,
             demand=demand,
             solar_generation=solar,
             grid_prices=grid,
@@ -144,7 +197,5 @@ def battery_utility_calculator(
         traceback.print_exc()
         raise
 
-    end_time = time.time()
-    print(f"battery_calc_service.calculate finished in {end_time - start_time:.2f} seconds")
-
+    print(f"  [BUC tool] done in {time.time() - start_time:.2f}s | worth={result['worth']:+.4f} EUR")
     return result

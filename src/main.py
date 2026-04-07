@@ -25,6 +25,11 @@ set AGENT_ID=S_02
 uvicorn main:app --port 8005
 
 
+OR 
+
+python start_agents.py
+
+
 """
 
 from contextlib import asynccontextmanager
