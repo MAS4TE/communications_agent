@@ -45,18 +45,20 @@ class MqttAgent:
         if msg.topic == self.topic_market_status and payload.get("status") == "market_open":
             job = {
                 "type": "market_open",
-                "market_data": payload,  # Let op: "payload" i.p.v. "market_data"
+                "market_data": payload,
             }
             print("MQTT: Market opened -> enqueue job")
             
         elif msg.topic == self.topic_market_clearing:
-            job = {
-                "type": "market_clearing",
-                "market_data": payload,  # Let op: "payload" i.p.v. "market_data"
-            }
-            print(f"MQTT: Market cleared -> enqueue job. Data: {payload}")
+            if payload.get("msg") == "market result":
+                job = {
+                    "type": "market_clearing",
+                    "market_data": payload,
+                }
+                print(f"MQTT: Market cleared -> enqueue job. Data: {payload}")
+            else:
+                print(f"MQTT: Ignored message on clearing topic: {payload.get('ack', 'unknown')}")
         
-        # Enqueue de job als er een is
         if job:
             asyncio.run_coroutine_threadsafe(
                 self.pipeline_manager.enqueue(job),
