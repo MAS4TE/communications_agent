@@ -76,13 +76,34 @@ class LMStudioAgent(AgentLLM):
         self.response_chunks = []
 
         # Add messages to chat
-        for msg in messages:
-            if msg["role"] == "system":
-                self._chat.add_user_message(f"System: {msg['content']}")
-            elif msg["role"] == "user":
+        # for msg in messages:
+        #     if msg["role"] == "system":
+        #         self._chat.add_user_message(f"System: {msg['content']}")
+        #     elif msg["role"] == "user":
+        #         self._chat.add_user_message(msg["content"])
+        #     elif msg["role"] == "assistant":
+        #         self._chat.add_assistant_response(msg["content"])
+
+        # Keep only the last 10 messages (excluding system prompt)
+        system_messages = [m for m in messages if m["role"] == "system"]
+        non_system_messages = [m for m in messages if m["role"] != "system"]
+        recent_messages = non_system_messages[-10:]  # last 10 only
+
+        # Rebuild chat with system prompt + last 10 messages
+        self._chat = lms.Chat()
+        for msg in system_messages:
+            self._chat.add_user_message(f"System: {msg['content']}")
+        for msg in recent_messages[:-1]:  # all but the last
+            if msg["role"] == "user":
                 self._chat.add_user_message(msg["content"])
             elif msg["role"] == "assistant":
                 self._chat.add_assistant_response(msg["content"])
+
+        # Add the latest user message
+        last = recent_messages[-1]
+        if last["role"] == "user":
+            self._chat.add_user_message(last["content"])
+            
 
         # Call act with fragment callback
         self._model.act(

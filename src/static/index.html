@@ -424,6 +424,10 @@
             <div class="profile-badge" data-value="true" id="profile-solar">Yes</div>
           </div>
           <div class="profile-field">
+            <div class="profile-field-label">Electric water heating</div>
+            <div class="profile-badge" data-value="false" id="profile-water">No</div>
+          </div>
+          <div class="profile-field">
             <div class="profile-field-label">Home battery</div>
             <div class="profile-badge" data-value="true" id="profile-battery">Yes</div>
           </div>
@@ -431,16 +435,9 @@
             <div class="profile-field-label">Battery capacity</div>
             <span class="profile-number" id="profile-battery-capacity">—</span>
           </div>
-          <div class="profile-field">
-            <div class="profile-field-label">Electric water heating</div>
-            <div class="profile-badge" data-value="false" id="profile-water">No</div>
-          </div>
-
         </div>
       </div>
-
     </div>
-
   </div>
 
   <script>
@@ -594,8 +591,9 @@
         setBadge('profile-ev',       d.electric_car);
         setBadge('profile-heatpump', d.heat_pump);
         setBadge('profile-solar',    d.solar_panels);
-        setBadge('profile-battery',  d.home_battery);
         setBadge('profile-water',    d.electric_water_heating);
+        setBadge('profile-battery',  d.home_battery);
+       
 
         // Battery reserve section: only show if profile has a home battery
         if (d.home_battery) {

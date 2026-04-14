@@ -10,5 +10,7 @@ import core.llm.tools.forecast_tool
 import core.llm.tools.battery_utility_tool
 import core.llm.tools.time_tool
 import core.llm.tools.profile_tool
+import core.llm.tools.preferences_tool
 import core.llm.tools.chronos_tool
 import core.llm.tools.example_D31_tool
+import core.llm.tools.explain_pipeline_bid_tool

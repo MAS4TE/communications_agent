@@ -3,6 +3,8 @@ import asyncio
 import uuid
 import time
 
+from core.pipeline.dto import PipelineDTO
+from core.main_context import set_pipeline_trace_bid, set_pipeline_trace_clearing
 
 class PipelineTracker:
     """Tracks which step is currently running and how long each one took."""
@@ -79,6 +81,7 @@ class PipelineManager:
             print("PIPELINE: background worker started")
 
     async def _worker(self):
+        
         while True:
             job_id, data = await self.queue.get()
             print(f"PIPELINE: starting job {job_id} (type={data.get('type')})")
@@ -93,20 +96,28 @@ class PipelineManager:
                     self.jobs[job_id]["error"] = f"No steps for type '{job_type}'"
                     continue
 
+                dto = PipelineDTO(data=data)
+
                 # --- tracker: start job ---
                 self.tracker.start_job(job_type, [s.__name__ for s in steps])
 
                 for step in steps:
                     print(f"PIPELINE: running step '{step.__name__}'")
                     self.tracker.begin(step.__name__)      # <-- begin
-                    data = await step(data)
+                    dto = await step(dto)
                     self.tracker.finish(step.__name__)     # <-- finish
 
                 # --- tracker: job done ---
                 self.tracker.finish_job("done")
 
-                self.jobs[job_id]["result"] = data
+                self.jobs[job_id]["result"] = dto.data
+                self.jobs[job_id]["trace"] = dto.trace
                 self.jobs[job_id]["status"] = "done"
+
+                if job_type == "market_open":
+                    set_pipeline_trace_bid(dto.trace)
+                elif job_type == "market_clearing":
+                    set_pipeline_trace_clearing(dto.trace)
                 print(f"PIPELINE: job {job_id} completed successfully")
 
             except Exception as e:

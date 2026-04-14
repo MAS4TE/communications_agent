@@ -102,12 +102,13 @@ def _print_bid_summary(label, result):
 # STEPS — market_open sequence
 # ---------------------------------------------------------------------------
 
-async def step1(data):
-    data["step1"] = "done"
+async def step1(dto):
+    dto["step1"] = "done"
     print("STEPS: Step 1 completed")
-    return data
+    dto.log_step("init", "Pipeline initialized and ready to run. ")
+    return dto
 
-async def step_test_llm(data):
+async def step_test_llm(dto):
     """Simple test step to verify the LLM is accessible from the pipeline."""
     from core.main_context import get_llm
     from core.domain.chat_session import SolarChatSession
@@ -115,7 +116,8 @@ async def step_test_llm(data):
     llm = get_llm()
     if llm is None:
         print("STEPS: step_test_llm — no LLM found, skipping")
-        return data
+        dto.log_step("test_llm", "No LLM found.")
+        return dto
 
     print("STEPS: step_test_llm — LLM found, sending test message...")
 
@@ -123,46 +125,69 @@ async def step_test_llm(data):
     response = await run_blocking(session.process_message, "Say hello in one sentence.")
 
     print(f"STEPS: step_test_llm — response: {response}")
-    data["llm_test_response"] = response
-    return data
+    dto["llm_test_response"] = response
+    dto.log_step("test_llm", "Verified LLM is reachable by sending a test message.")
+    return dto
 
 
 
-async def step_retrieve_preferences(data):
+async def step_retrieve_preferences(dto):
     # ProsumerService.get_preferences() is a lightweight DB/config read.
     # If it ever becomes slow, wrap it with run_blocking too.
     service = ProsumerService()
     preferences = service.get_preferences()
-    data["preferences"] = preferences
-    if data.get("storage_size_kwh", 0) > 0:
-        data["battery_tradeable_pct"] = preferences.get("battery_tradeable_pct", 50)
+    dto["preferences"] = preferences
+    if dto.get("storage_size_kwh", 0) > 0:
+        dto["battery_tradeable_pct"] = preferences.get("battery_tradeable_pct", 50)
     # data["battery_tradeable_pct"] = preferences.get("battery_tradeable_pct", 50)
 
     print("STEPS: preferences retrieved:", preferences)
-    return data
+
+    dto.log_step(
+        "retrieve_preferences",
+        "Loaded the user's trading preferences from the database.",
+        {
+            "preference":    preferences,
+        }
+    )
+    return dto
 
 
-async def step_retrieve_profile(data):
+async def step_retrieve_profile(dto):
     tool_get_profile = next(
         t for t in tool_registry.tools if t.__name__ == "get_profile_metadata"
     )
     # Synchronous tool call — offload so the loop stays free
     result_profile = await run_blocking(tool_get_profile, GLOBAL_PROFILE_ID)
     print("result profile", result_profile)
-    data["storage_size_kwh"] = result_profile.get("battery_size_kwh", 0.0)
-    print(data["storage_size_kwh"])
-    return data
+    dto["storage_size_kwh"] = result_profile.get("battery_size_kwh", 0.0)
+    print(dto["storage_size_kwh"])
+    role = "seller" if dto["storage_size_kwh"] > 0 else "buyer"
+
+    dto.log_step(
+        "retrieve_profile",
+        f"Fetched the prosumer's battery profile. This user is a {role}.",
+        {
+            "tool": "get_profile_metadata", 
+            "profile":result_profile,
+            "battery_size_kwh": dto["storage_size_kwh"],
+            "role":             role,
+        }
+    )
+
+    return dto
 
 
-async def step_market_open(data):
+async def step_market_open(dto):
     print("PIPELINE: Market opened step triggered!")
-    print("market data", data["market_data"])
-    data["market_open_processed"] = True
-    return data
+    print("market data", dto["market_data"])
+    dto["market_open_processed"] = True
+    dto.log_step("market_open", "Received and acknowledged the market-open event.")
+    return dto
 
 
-async def step_retrieve_market_info(data):
-    market_info = data["market_data"]
+async def step_retrieve_market_info(dto):
+    market_info = dto["market_data"]
     products = market_info.get("products", [])
     starts, ends = [], []
     for p in products:
@@ -171,20 +196,29 @@ async def step_retrieve_market_info(data):
             ends.append(pd.to_datetime(p["end_time"]))
 
     # Only use the first product for now
-    data["market_window"] = {"start": starts[0], "end": ends[0]}
-    print("market window", data["market_window"])
-    return data
+    dto["market_window"] = {"start": starts[0], "end": ends[0]}
+    print("market window", dto["market_window"])
+
+    dto.log_step(
+        "retrieve_market_info",
+        "Extracted the trading window from the market event.",
+        {
+            "window_start": str(starts[0]),
+            "window_end":   str(ends[0]),
+        }
+    )
+    return dto
 
 
-async def step_fc_demand(data):
+async def step_fc_demand(dto):
     """
     Forecast demand using Chronos.
     run_blocking offloads the CPU-heavy inference to a worker thread,
     keeping the event loop (and chatbot) responsive while it runs.
     """
     print("STEPS: step_fc_demand started")
-    start = pd.to_datetime(data["market_window"]["start"])
-    end = pd.to_datetime(data["market_window"]["end"])
+    start = pd.to_datetime(dto["market_window"]["start"])
+    end = pd.to_datetime(dto["market_window"]["end"])
 
     demand_fc = await run_blocking(
         forecast_timeseries_from_csv,
@@ -199,19 +233,31 @@ async def step_fc_demand(data):
 
     print("STEPS: Chronos demand returned, length:", len(demand_fc["median"]))
     timestamps = pd.to_datetime(list(demand_fc["timestamps"]), errors="raise")
-    data["demand_fc"] = pd.Series(demand_fc["median"], index=timestamps)
-    print("STEPS: demand forecast\n", data["demand_fc"])
-    return data
+    dto["demand_fc"] = pd.Series(demand_fc["median"], index=timestamps)
+    print("STEPS: demand forecast\n", dto["demand_fc"])
+
+    series = dto["demand_fc"]
+    dto.log_step(
+        "forecast_demand",
+        "Forecast electricity demand for the trading window using the Chronos model.",
+        {
+            "timesteps": len(series),
+            "mean_kw":   round(float(series.mean()), 3),
+            "max_kw":    round(float(series.max()), 3),
+            "min_kw":    round(float(series.min()), 3),
+        }
+    )
+    return dto
 
 
-async def step_fc_solar(data):
+async def step_fc_solar(dto):
     """
     Forecast solar generation using Chronos.
     Same pattern as step_fc_demand — offloaded to thread pool.
     """
     print("STEPS: step_fc_solar started")
-    start = pd.to_datetime(data["market_window"]["start"])
-    end = pd.to_datetime(data["market_window"]["end"])
+    start = pd.to_datetime(dto["market_window"]["start"])
+    end = pd.to_datetime(dto["market_window"]["end"])
 
     solar_fc = await run_blocking(
         forecast_timeseries_from_csv,
@@ -226,12 +272,25 @@ async def step_fc_solar(data):
 
     print("STEPS: Chronos solar returned, length:", len(solar_fc["median"]))
     timestamps = pd.to_datetime(list(solar_fc["timestamps"]), errors="raise")
-    data["solar_fc"] = pd.Series(solar_fc["median"], index=timestamps)
-    print("STEPS: solar forecast\n", data["solar_fc"])
-    return data
+    dto["solar_fc"] = pd.Series(solar_fc["median"], index=timestamps)
+    print("STEPS: solar forecast\n", dto["solar_fc"])
+
+    series = dto["solar_fc"]
+
+    dto.log_step(
+        "forecast_solar",
+        "Forecast solar generation for the trading window using the Chronos model.",
+        {
+            "timesteps": len(series),
+            "mean_kw":   round(float(series.mean()), 3),
+            "peak_kw":   round(float(series.max()), 3),
+            "min_kw":    round(float(series.min()), 3),
+        }
+    )
+    return dto
 
 
-async def step_fc_prices(data):
+async def step_fc_prices(dto):
     """
     Forecast all price columns using Chronos — sequentially.
 
@@ -241,8 +300,8 @@ async def step_fc_prices(data):
     remains responsive throughout.
     """
     print("STEPS: step_fc_prices started")
-    start = pd.to_datetime(data["market_window"]["start"])
-    end = pd.to_datetime(data["market_window"]["end"])
+    start = pd.to_datetime(dto["market_window"]["start"])
+    end = pd.to_datetime(dto["market_window"]["end"])
 
     price_csv = "data/profile_data/prices.csv"
     df = pd.read_csv(price_csv)
@@ -269,15 +328,27 @@ async def step_fc_prices(data):
         timestamps = pd.to_datetime(result["timestamps"], errors="raise")
         prices_fc[col] = pd.Series(result["median"], index=timestamps)
 
-    data["prices_fc"] = prices_fc
+    dto["prices_fc"] = prices_fc
 
     print("STEPS: all price forecasts done")
-    for k, v in data["prices_fc"].items():
+    for k, v in dto["prices_fc"].items():
         print(k, v.head())
 
-    return data
+    dto.log_step(
+        "forecast_prices",
+        f"Forecast {len(price_columns)} energy price streams for the trading window.",
+        {
+            "columns_forecast": price_columns,
+            "summaries": {
+                col: {"mean": round(float(s.mean()), 4), "max": round(float(s.max()), 4)}
+                for col, s in prices_fc.items()
+            },
+        }
+    )
 
-async def step_reason_buc_range_buy(data):
+    return dto
+
+async def step_reason_buc_range_buy(dto):
     """
     Ask the LLM to reason about what volume range to run the BUC for.
  
@@ -292,12 +363,12 @@ async def step_reason_buc_range_buy(data):
     llm = get_llm()
     if llm is None:
         print("STEPS: no LLM available, using fallback range 1–10")
-        data["buc_min_volume"] = 1
-        data["buc_max_volume"] = 10
-        return data
+        dto["buc_min_volume"] = 1
+        dto["buc_max_volume"] = 10
+        return dto
  
     # Summarise demand forecast so we don't dump a huge series into the prompt
-    demand_fc = data.get("demand_fc")
+    demand_fc = dto.get("demand_fc")
     if demand_fc is not None and len(demand_fc) > 0:
         demand_summary = (
             f"min={demand_fc.min():.2f} kWh, "
@@ -308,9 +379,9 @@ async def step_reason_buc_range_buy(data):
     else:
         demand_summary = "not available"
  
-    preferences = data.get("preferences", {})
+    preferences = dto.get("preferences", {})
     trading_preference = preferences.get("trading_preference", "unknown")
-    market_window = data.get("market_window", {})
+    market_window = dto.get("market_window", {})
  
     prompt = f"""You are an energy trading coach helping a buyer decide how much 
     storage capacity to bid for in a local energy market. Always respond in English AND ONLY ENGLISH. 
@@ -353,19 +424,32 @@ async def step_reason_buc_range_buy(data):
         min_vol = max(1, int(decision["min_volume"]))
         max_vol = max(min_vol, int(decision["max_volume"]))
  
-        data["buc_min_volume"] = min_vol
-        data["buc_max_volume"] = max_vol
+        dto["buc_min_volume"] = min_vol
+        dto["buc_max_volume"] = max_vol
         print(f"STEPS: agent decided BUC range: {min_vol}–{max_vol} kWh")
         print(f"STEPS: reasoning: {decision.get('reasoning', '')}")
+        reasoning_text = decision.get('reasoning', '')
  
     except Exception as e:
         print(f"STEPS: reasoning step failed ({e}), using fallback range 1–10")
-        data["buc_min_volume"] = 1
-        data["buc_max_volume"] = 10
-    # print(q)
-    return data
+        dto["buc_min_volume"] = 1
+        dto["buc_max_volume"] = 10
+        reasoning_text = "fallback — LLM unavailable or returned invalid JSON"
 
-async def step_battery_utility_calculator(data):
+    # print(q)
+
+    dto.log_step(
+    "reason_buc_range",
+    "Used the LLM to decide the volume range to evaluate in the BUC.",
+    {
+        "min_volume": dto["buc_min_volume"],
+        "max_volume": dto["buc_max_volume"],
+        "reasoning":  reasoning_text,
+    }
+)
+    return dto
+
+async def step_battery_utility_calculator(dto):
     """
     Run the Battery Utility Calculator (BUC) across all tradeable volumes and
     produce a bidding curve for market submission.
@@ -426,12 +510,12 @@ async def step_battery_utility_calculator(data):
     print("=" * 60)
 
     # --- Prepare input timeseries ---
-    demand_series    = _to_1d(data.get("demand_fc"))
-    solar_series     = _to_1d(data.get("solar_fc"))
-    grid_prices      = _to_1d(data.get("prices_fc", {}).get("supplier"))
-    eeg_prices       = _to_1d(data.get("prices_fc", {}).get("eeg"))
-    community_prices = _to_1d(data.get("prices_fc", {}).get("community"))
-    wholesale_prices = _to_1d(data.get("prices_fc", {}).get("wholesale"))
+    demand_series    = _to_1d(dto.get("demand_fc"))
+    solar_series     = _to_1d(dto.get("solar_fc"))
+    grid_prices      = _to_1d(dto.get("prices_fc", {}).get("supplier"))
+    eeg_prices       = _to_1d(dto.get("prices_fc", {}).get("eeg"))
+    community_prices = _to_1d(dto.get("prices_fc", {}).get("community"))
+    wholesale_prices = _to_1d(dto.get("prices_fc", {}).get("wholesale"))
 
     buc_tool = next(
         t for t in tool_registry.tools if t.__name__ == "battery_utility_calculator"
@@ -448,10 +532,10 @@ async def step_battery_utility_calculator(data):
     )
 
     # --- Determine role, volumes, and baseline ---
-    if data.get("storage_size_kwh", 0) > 0:  # seller
-        trading_preference = data.get("preferences", {}).get("trading_preference", "Profit")
-        full_battery_kwh = data["storage_size_kwh"]
-        tradeable_pct = data.get("preferences", {}).get("battery_tradeable_pct", 50)
+    if dto.get("storage_size_kwh", 0) > 0:  # seller
+        trading_preference = dto.get("preferences", {}).get("trading_preference", "Profit")
+        full_battery_kwh = dto["storage_size_kwh"]
+        tradeable_pct = dto.get("preferences", {}).get("battery_tradeable_pct", 50)
         max_tradeable    = int(full_battery_kwh * (tradeable_pct / 100))
         goal               = "max_green_energy" if trading_preference == "Green Energy" else "max_cashflow"
         side             = "seller"
@@ -471,7 +555,7 @@ async def step_battery_utility_calculator(data):
         # print(q)
 
     else:  # buyer
-        trading_preference = data.get("preferences", {}).get("trading_preference", "Profit")
+        trading_preference = dto.get("preferences", {}).get("trading_preference", "Profit")
         goal               = "max_green_energy" if trading_preference == "Green Energy" else "max_cashflow"
         side               = "buyer"
 
@@ -482,9 +566,9 @@ async def step_battery_utility_calculator(data):
 
         # LLM-reasoned volume range — buyer has no battery so we estimate
         # how much virtual storage would be useful given their demand/solar profile
-        data       = await step_reason_buc_range_buy(data)
-        min_volume = data.get("buc_min_volume", 1)
-        max_volume = data.get("buc_max_volume", 10)
+        dto       = await step_reason_buc_range_buy(dto)
+        min_volume = dto.get("buc_min_volume", 1)
+        max_volume = dto.get("buc_max_volume", 10)
         volumes    = range(min_volume, max_volume + 1)
 
         print(f"  Candidate range  : {min_volume} – {max_volume} kWh")
@@ -589,13 +673,28 @@ async def step_battery_utility_calculator(data):
     )
     print("=" * 60)
 
-    data["bidding_curve"]  = bidding_curve
-    data["buc_soc_series"] = buc_soc_series
+    dto["bidding_curve"]  = bidding_curve
+    dto["buc_soc_series"] = buc_soc_series
 
-    return data
+    dto.log_step(
+        "battery_utility_calculator",
+        "Ran the Battery Utility Calculator to find how much storage capacity to bid for and at what price.",
+        {
+            "tool":                "battery_utility_calculator",
+            "role":                side,
+            "bid_steps":           len(bidding_curve),
+            "total_volume_kwh":    round(float(bidding_curve["cumulative_volume"].max()), 2),
+            "price_range_eur_kwh": [
+                round(float(bidding_curve["marginal_price_per_kwh"].min()), 4),
+                round(float(bidding_curve["marginal_price_per_kwh"].max()), 4),
+            ],
+        }
+    )
+
+    return dto
 
 
-async def step_set_make_orderbook(data):
+async def step_set_make_orderbook(dto):
     """
     Build the orderbook from the bidding curve produced by step_battery_utility_calculator.
 
@@ -611,21 +710,21 @@ async def step_set_make_orderbook(data):
     print("STEPS: ENTER MAKE ORDERBOOK STEP")
 
     # Increment bid_id for this round
-    data["bid_id"] = 0 if data.get("bid_id") is None else data["bid_id"] + 1
+    dto["bid_id"] = 0 if dto.get("bid_id") is None else dto["bid_id"] + 1
 
-    bidding_curve = data.get("bidding_curve")
+    bidding_curve = dto.get("bidding_curve")
 
     if bidding_curve is None or bidding_curve.empty:
         print("STEPS: NO BIDDING CURVE FOUND — orderbook will be empty")
-        data["orderbook"] = []
-        return data
+        dto["orderbook"] = []
+        return dto
 
     print(f"STEPS: building orderbook from {len(bidding_curve)} curve steps ...")
 
     orderbook = []
     for i, row in bidding_curve.iterrows():
         order = {
-            "bid_id":  f"{data['bid_id']}_{i + 1}",    # unique id per bid
+            "bid_id":  f"{dto['bid_id']}_{i + 1}",    # unique id per bid
             "slot":    i + 1,                          # 1-based step index
             "volume":  row["volume"],                  # always 1 kWh per step
             "price":   row["marginal_price_per_kwh"],  # EUR/kWh for this slot
@@ -633,24 +732,36 @@ async def step_set_make_orderbook(data):
         orderbook.append(order)
         print(f"  slot {order['slot']:>3}  |  volume={order['volume']:.1f} kWh  |  price={order['price']:.4f} EUR/kWh")
 
-    data["orderbook"] = orderbook
+    dto["orderbook"] = orderbook
 
     print(f"STEPS: FINAL ORDERBOOK — {len(orderbook)} bids | "
           f"total volume: {sum(o['volume'] for o in orderbook):.1f} kWh | "
           f"price range: {min(o['price'] for o in orderbook):.4f} – "
           f"{max(o['price'] for o in orderbook):.4f} EUR/kWh")
+    
+    dto.log_step(
+        "make_orderbook",
+        "Converted the bidding curve into a market orderbook — one order per kWh slot.",
+        {
+            "num_orders":        len(orderbook),
+            "total_volume_kwh":  round(sum(o["volume"] for o in orderbook), 2),
+            "price_min_eur_kwh": round(min(o["price"] for o in orderbook), 4),
+            "price_max_eur_kwh": round(max(o["price"] for o in orderbook), 4),
+        }
+    )
 
-    return data
+    return dto
 
-async def step_publish_bid(data):
+async def step_publish_bid(dto):
     print("STEPS: step_publish_bid started")
 
     # ensure orderbook exists
-    orderbook = data.get("orderbook")
+    orderbook = dto.get("orderbook")
 
     if not orderbook:
         print("STEPS: no orderbook to publish")
-        return data
+        dto.log_step("publish_bid", "No orderbook to publish — step skipped.")
+        return dto
 
     print("STEPS: publishing orderbook:", orderbook)
 
@@ -658,20 +769,27 @@ async def step_publish_bid(data):
     mqtt_agent.send_orderbook_to_market(orderbook)
 
     print("STEPS: bid published successfully")
-    return data
 
-async def step_publish_battery_schedule(data):
+    dto.log_step(
+        "publish_bid",
+        "Submitted the orderbook to the energy market via MQTT.",
+        {"num_orders_sent": len(orderbook)}
+    )
+    return dto
+
+async def step_publish_battery_schedule(dto):
     print("STEPS: step_publish_battery_schedule started")
 
-    if data.get("storage_size_kwh", 0) <=0:
+    if dto.get("storage_size_kwh", 0) <=0:
         print('STEPS: not a seller, skipping battery schedule publishing')
         # maybe change this after discussion with C on when to calculate this and where to actually send it
-        return data
+        return dto
 
-    buc_soc_series = data.get("buc_soc_series")
+    buc_soc_series = dto.get("buc_soc_series")
     if not buc_soc_series:
         print("STEPS: no buc_soc_series found, skipping")
-        return data
+        dto.log_step("publish_battery_schedule", "No SOC series found — step skipped.")
+        return dto
 
     power_request = await soc_to_power_request(buc_soc_series)
     print(f"STEPS: power request — {len(power_request['time_steps'])} timesteps, first power: {power_request['power_rate_w'][0]:.2f} W")
@@ -680,45 +798,64 @@ async def step_publish_battery_schedule(data):
     mqtt_agent.send_power_request_to_battery(power_request)
 
     print("STEPS: battery schedule published successfully")
-    return data
+
+    dto.log_step(
+        "publish_battery_schedule",
+        "Sent the battery charging/discharging schedule to the physical battery via MQTT.",
+        {
+            "timesteps":     len(power_request["time_steps"]),
+            "first_power_w": round(power_request["power_rate_w"][0], 2),
+        }
+    )
+    return dto
 
 
 # ---------------------------------------------------------------------------
 # STEPS — debug / utility
 # ---------------------------------------------------------------------------
 
-async def time_tool_step(data):
+async def time_tool_step(dto):
     print("Tools in registry:")
     for t in tool_registry.tools:
         print("-", t.__name__)
 
     tool = next(t for t in tool_registry.tools if t.__name__ == "get_current_time")
     result = await run_blocking(tool)
-    data["current_time"] = result["current_time"]
-    return data
+    dto["current_time"] = result["current_time"]
+
+    dto.log_step(
+        "get_current_time",
+        "Fetched the current time from the time tool.",
+        {"tool": "get_current_time", "current_time": result["current_time"]}
+    )
+    return dto
 
 
-async def step2(data):
-    print("Step 2 sees current_time:", data.get("current_time"))
-    data["step2"] = "done"
+async def step2(dto):
+    print("Step 2 sees current_time:", dto.get("current_time"))
+    dto["step2"] = "done"
     print("STEPS: Step 2 completed")
-    return data
+    dto.log_step("step2", "Debug step 2 completed.")
+
+    return dto
 
 
-async def step3(data):
-    data["step3"] = "done"
+async def step3(dto):
+    dto["step3"] = "done"
     print("STEPS: All steps completed")
-    return data
+    dto.log_step("pipeline_complete", "All pipeline steps completed successfully.")
+    return dto
 
 
 # ---------------------------------------------------------------------------
 # STEPS — market_clearing sequence
 # ---------------------------------------------------------------------------
 
-async def step4_retrieve_market_clearing_info(data):
-    print("market clearing info:", data.get("market_data"))
+async def step4_retrieve_market_clearing_info(dto):
+    print("market clearing info:", dto.get("market_data"))
     print("STEPS: Step 4 completed - in market clearing")
-    return data
+    dto.log_step("retrieve_market_clearing_info", "Retrieved and logged the market clearing result.")
+    return dto
 
 
 # ---------------------------------------------------------------------------
