@@ -7,8 +7,8 @@ import paho.mqtt.client as mqtt
 
 # from core.pipeline.manager import PipelineManager
 
-class MqttAgent:
-    def __init__(self, broker, port, agent_id, pipeline_manager, loop):
+class MqttAgentAssume:
+    def __init__(self, broker, port, agent_id, pipeline_manager, loop): #username and password optional
         self.broker = broker
         self.port = port
         self.agent_id = agent_id
@@ -22,6 +22,7 @@ class MqttAgent:
         self.client = mqtt.Client(client_id=f"agent{agent_id}")
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
+
 
     def start(self):
         self.client.connect(self.broker, self.port, 60)
@@ -76,11 +77,3 @@ class MqttAgent:
         self.client.publish(self.topic_bids, json.dumps(orderbook))
         print(f"Agent {self.agent_id} sent orderbook: {orderbook} to topic {self.topic_bids}")
 
-    
-    def send_power_request_to_battery(self, power_request: dict):
-        """
-        Sends a power request schedule to the battery controller.
-        """
-        topic = "mas4te/battery-storage/power_request"
-        self.client.publish(topic, json.dumps(power_request))
-        print(f"Agent {self.agent_id} sent power request to topic {topic}")

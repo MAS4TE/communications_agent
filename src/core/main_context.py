@@ -8,20 +8,26 @@ import os
 # GLOBAL_PROFILE_ID = 152
 GLOBAL_PROFILE_ID = int(os.environ.get("PROFILE_ID", 84))
 
-MQTT_AGENT = None
+MQTT_AGENT_BATTERY = None
+MQTT_AGENT_ASSUME = None
 LLM = None
 
 PIPELINE_TRACE_BID = []
 PIPELINE_TRACE_CLEARING = []
 
-def set_mqtt_agent(agent):
-    global MQTT_AGENT
-    MQTT_AGENT = agent
+def set_mqtt_agent_battery(agent):
+    global MQTT_AGENT_BATTERY
+    MQTT_AGENT_BATTERY = agent
 
-def get_mqtt_agent():
-    return MQTT_AGENT
+def get_mqtt_agent_battery():
+    return MQTT_AGENT_BATTERY
 
+def set_mqtt_agent_assume(agent):
+    global MQTT_AGENT_ASSUME
+    MQTT_AGENT_ASSUME = agent
 
+def get_mqtt_agent_assume():
+    return MQTT_AGENT_ASSUME
 
 
 def set_llm(llm):
@@ -42,7 +48,7 @@ def get_pipeline_trace_bid() -> list:
 
 def set_pipeline_trace_clearing(trace: list):
     global PIPELINE_TRACE_CLEARING
-    PIPELINE_TRACE_CLEARING = trace
+    PIPELINE_TRACE_CLEARING.append(trace) # keep all market clearings
 
 def get_pipeline_trace_clearing() -> list:
     return PIPELINE_TRACE_CLEARING

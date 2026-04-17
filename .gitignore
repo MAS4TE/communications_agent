@@ -87,3 +87,7 @@ Thumbs.db
 # IoT logs
 data/
 src/data/
+
+# credentials
+src/mas4tecontroller_mqtt_credentials.yml
+

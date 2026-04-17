@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from core.llm.tools.registry import tool_registry
 from core.main_context import GLOBAL_PROFILE_ID
-from core.main_context import get_mqtt_agent
+from core.main_context import get_mqtt_agent_assume, get_mqtt_agent_battery
 
 import pandas as pd
 from datetime import datetime
@@ -765,8 +765,8 @@ async def step_publish_bid(dto):
 
     print("STEPS: publishing orderbook:", orderbook)
 
-    mqtt_agent = get_mqtt_agent()
-    mqtt_agent.send_orderbook_to_market(orderbook)
+    mqtt_agent_assume = get_mqtt_agent_assume()
+    mqtt_agent_assume.send_orderbook_to_market(orderbook)
 
     print("STEPS: bid published successfully")
 
@@ -794,8 +794,8 @@ async def step_publish_battery_schedule(dto):
     power_request = await soc_to_power_request(buc_soc_series)
     print(f"STEPS: power request — {len(power_request['time_steps'])} timesteps, first power: {power_request['power_rate_w'][0]:.2f} W")
 
-    mqtt_agent = get_mqtt_agent()
-    mqtt_agent.send_power_request_to_battery(power_request)
+    mqtt_agent_battery = get_mqtt_agent_battery()
+    mqtt_agent_battery.send_power_request_to_battery(power_request)
 
     print("STEPS: battery schedule published successfully")
 
@@ -852,11 +852,30 @@ async def step3(dto):
 # ---------------------------------------------------------------------------
 
 async def step4_retrieve_market_clearing_info(dto):
-    print("market clearing info:", dto.get("market_data"))
-    print("STEPS: Step 4 completed - in market clearing")
-    dto.log_step("retrieve_market_clearing_info", "Retrieved and logged the market clearing result.")
-    return dto
+    market_data = dto.get("market_data")
+    orderbook = market_data.get("orderbook", [])
 
+    total_volume = sum(o["accepted_volume"] for o in orderbook)
+    clearing_price = orderbook[0]["accepted_price"] if orderbook else None
+    num_bids = len(orderbook)
+    num_accepted = sum(1 for o in orderbook if o["accepted_volume"] > 0)
+
+    print("market clearing info:", market_data)
+    print("STEPS: Step 4 completed - in market clearing")
+
+    dto.log_step(
+        "market_clearing",
+        "Received the market clearing result — bids were evaluated and matched.",
+        {
+            "market_id":       market_data.get("market_id"),
+            "unit_id":         market_data.get("unit_id"),
+            "num_bids":        num_bids,
+            "num_accepted":    num_accepted,
+            "total_volume_kwh": round(total_volume, 2),
+            "clearing_price_eur_kwh": round(clearing_price, 6) if clearing_price else None,
+        }
+    )
+    return dto
 
 # ---------------------------------------------------------------------------
 # STEP MAP
