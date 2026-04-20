@@ -62,6 +62,12 @@ from core.llm.prompts import build_system_message
 from core.main_context import set_llm
 
 
+apikey_path = os.path.join(os.path.dirname(__file__), "mas4te_mistral_api_key.yml")
+if os.path.exists(apikey_path):
+    with open(apikey_path) as f:
+        key = yaml.safe_load(f)
+    os.environ["MISTRAL_API_KEY"] = key.get("mistral_api_key", "")
+
 settings = Settings()
 
 

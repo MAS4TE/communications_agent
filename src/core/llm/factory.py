@@ -7,6 +7,7 @@ from .interfaces.base import BaseLLM
 from .interfaces.agent import AgentLLM
 from .backends.openai_agent import OpenAIAgent
 from .backends.lmstudio_agent import LMStudioAgent
+from .backends.mistral_agent import MistralAgent
 
 
 class LLMFactory:
@@ -50,3 +51,4 @@ class LLMFactory:
 # Agentic
 LLMFactory.register("openai-agent", OpenAIAgent)
 LLMFactory.register("lmstudio-agent", LMStudioAgent)
+LLMFactory.register("mistral-agent", MistralAgent)

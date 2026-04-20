@@ -886,7 +886,7 @@ STEP_MAP = {
         step1,
         step_retrieve_preferences,
         step_retrieve_profile,   # uncomment if needed
-        # step_test_llm,
+        step_test_llm,
         # time_tool_step,
         # step2,
         step_market_open,
