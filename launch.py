@@ -55,9 +55,9 @@ time.sleep(3)
 # Agents
 agents = [
     {"PROFILE_ID": "3",   "AGENT_ID": "B_01"},
-    # {"PROFILE_ID": "152", "AGENT_ID": "B_02"},
-    # {"PROFILE_ID": "84",  "AGENT_ID": "S_01"},
-    # {"PROFILE_ID": "92",  "AGENT_ID": "S_02"},
+    {"PROFILE_ID": "152", "AGENT_ID": "B_02"},
+    {"PROFILE_ID": "84",  "AGENT_ID": "S_01"},
+    {"PROFILE_ID": "92",  "AGENT_ID": "S_02"},
 ]
 
 agents_src    = os.path.join(BASE, "src")

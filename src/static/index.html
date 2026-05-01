@@ -333,7 +333,7 @@
               <div class="step-track">
                 <div class="step-fill" id="pref-fill"></div>
                 <div class="step-dots" id="pref-dots"></div>
-                <input type="range" class="step-range" id="pref-range" min="0" max="1" step="1" value="0">
+                <input type="range" class="step-range" id="pref-range" min="0" max="1" step="1" value="1">
               </div>
               <div class="step-labels" id="pref-labels"></div>
             </div>
@@ -459,7 +459,7 @@
 
     // commented-out sliders still track state so save payload stays consistent
     let riskValue      = 1;
-    let prefValue      = 0;
+    let prefValue      = 1; //0 is profit, 1 is green
     let expertiseValue = 0;
     let batteryReserve = 20;      // % to always keep
     let batteryCapacityKwh = null; // filled from profile if available

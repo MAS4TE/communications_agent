@@ -2,6 +2,7 @@
 import pandas as pd
 from core.llm.tools.decorators import tool, trace_tool
 from core.domain.battery_utility_logic import BatteryUtilityCalculator
+from battery_utility_calculator import Storage
 
 import time
 import traceback
@@ -115,8 +116,8 @@ def _ensure_series(data, index):
 )
 @trace_tool
 def battery_utility_calculator(
-    storage_size_kwh: float,
-    baseline_storage_kwh: float = 0,
+    baseline_storage: Storage,
+    storages_to_calculate: list[Storage],
     demand_series=None,
     solar_series=None,
     grid_prices=None,
@@ -161,7 +162,7 @@ def battery_utility_calculator(
     """
     battery_calc_service = BatteryUtilityCalculator()
 
-    print(f"  [BUC tool] candidate={storage_size_kwh} kWh | baseline={baseline_storage_kwh} kWh | goal={goal}")
+    print(f"  [BUC tool] candidate={storages_to_calculate} kWh | baseline={baseline_storage} kWh | goal={goal}")
 
     # Build a datetime index matching the length of the input timeseries.
     # Fallback sample data (5 hours) is used when no real data is provided,
@@ -177,11 +178,13 @@ def battery_utility_calculator(
     community = _ensure_series(community_prices, index) if community_prices is not None else pd.Series([0.10, 0.11, 0.13, 0.12, 0.09], index=default_index)
     wholesale = _ensure_series(wholesale_prices, index) if wholesale_prices is not None else pd.Series([0.06, 0.07, 0.09, 0.08, 0.05], index=default_index)
 
+    print('[BUC tool] after ensure_series')
+
     start_time = time.time()
     try:
         result = battery_calc_service.calculate(
-            storage_size_kwh=storage_size_kwh,
-            baseline_storage_kwh=baseline_storage_kwh,
+            baseline_storage=baseline_storage,
+            storages_to_calculate=storages_to_calculate,
             demand=demand,
             solar_generation=solar,
             grid_prices=grid,
@@ -197,5 +200,5 @@ def battery_utility_calculator(
         traceback.print_exc()
         raise
 
-    print(f"  [BUC tool] done in {time.time() - start_time:.2f}s | worth={result['worth']:+.4f} EUR")
+    print(f"  [BUC tool] done")# in {time.time() - start_time:.2f}s | worth={result['worth']:.4f} EUR")
     return result

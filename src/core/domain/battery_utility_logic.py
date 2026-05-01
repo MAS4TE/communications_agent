@@ -2,7 +2,7 @@
 import pandas as pd
 from battery_utility_calculator import (
     Storage,
-    calculate_storage_worth,
+    calculate_multiple_storage_worth,
 )
 
 
@@ -23,8 +23,8 @@ class BatteryUtilityCalculator:
 
     def calculate(
         self,
-        storage_size_kwh: float,
-        baseline_storage_kwh: float,
+        baseline_storage: Storage,
+        storages_to_calculate: list[Storage],
         demand: pd.Series,
         solar_generation: pd.Series,
         grid_prices: pd.Series,
@@ -83,12 +83,10 @@ class BatteryUtilityCalculator:
 
         # Storage constructor: Storage(id, c_rate, volume, efficiency)
         # id=0 for baseline, id=1 for candidate — these are arbitrary internal identifiers
-        baseline  = Storage(0, 1, baseline_storage_kwh, 1)
-        candidate = Storage(1, 1, storage_size_kwh, 1)
 
-        result = calculate_storage_worth(
-            baseline_storage=baseline,
-            storage_to_calculate=candidate,
+        result = calculate_multiple_storage_worth(
+            baseline_storage=baseline_storage,
+            storages_to_calculate=storages_to_calculate,
             demand=demand,
             solar_generation=solar_generation,
             supplier_prices=grid_prices,
@@ -96,20 +94,9 @@ class BatteryUtilityCalculator:
             community_market_prices=community_prices,
             wholesale_market_prices=wholesale_prices,
             solver=solver,
+            goal = goal, 
             return_charge_timeseries=return_charge_timeseries,
         )
 
-        # calculate_storage_worth returns a dict when return_charge_timeseries=True,
-        # otherwise a plain float
-        if return_charge_timeseries:
-            worth     = result["worth"]
-            charge_ts = result["storage_to_calc_charge_ts"]
-        else:
-            worth     = result
-            charge_ts = None
+        return result
 
-        out = {"worth": worth}
-        if return_charge_timeseries:
-            out["storage_to_calc_charge_ts"] = charge_ts
-
-        return out
