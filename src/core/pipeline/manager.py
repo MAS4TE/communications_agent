@@ -81,6 +81,7 @@ class PipelineManager:
             print("PIPELINE: background worker started")
 
     async def _worker(self):
+        _last_market_open_dto = None  # store between jobs
         
         while True:
             job_id, data = await self.queue.get()
@@ -88,7 +89,7 @@ class PipelineManager:
 
             try:
                 job_type = data.get("type")
-                steps = self.step_map[job_type]#.get(job_type, [])
+                steps = self.step_map[job_type]
 
                 if not steps:
                     print(f"PIPELINE: no steps defined for job type '{job_type}'")
@@ -98,16 +99,20 @@ class PipelineManager:
 
                 dto = PipelineDTO(data=data)
 
-                # --- tracker: start job ---
+                # Merge previous market_open DTO into market_clearing job
+                if job_type == "market_clearing" and _last_market_open_dto is not None:
+                    for key, value in _last_market_open_dto.data.items():
+                        if key not in dto.data:  # don't overwrite market_clearing data
+                            dto.data[key] = value
+
                 self.tracker.start_job(job_type, [s.__name__ for s in steps])
 
                 for step in steps:
                     print(f"PIPELINE: running step '{step.__name__}'")
-                    self.tracker.begin(step.__name__)      # <-- begin
+                    self.tracker.begin(step.__name__)
                     dto = await step(dto)
-                    self.tracker.finish(step.__name__)     # <-- finish
+                    self.tracker.finish(step.__name__)
 
-                # --- tracker: job done ---
                 self.tracker.finish_job("done")
 
                 self.jobs[job_id]["result"] = dto.data
@@ -116,8 +121,10 @@ class PipelineManager:
 
                 if job_type == "market_open":
                     set_pipeline_trace_bid(dto.trace)
+                    _last_market_open_dto = dto  # save for next clearing job
                 elif job_type == "market_clearing":
                     set_pipeline_trace_clearing(dto.trace)
+
                 print(f"PIPELINE: job {job_id} completed successfully")
 
             except Exception as e:

@@ -139,7 +139,9 @@ async def step_retrieve_preferences(dto):
     if dto.get("storage_size_kwh", 0) > 0:
         dto["battery_tradeable_pct"] = preferences.get("battery_tradeable_pct", 50)
 
+    preferences["trading_preference"] = "Green"
     print("STEPS: preferences retrieved:", preferences)
+    
 
     dto.log_step(
         "retrieve_preferences",
@@ -709,7 +711,8 @@ async def step_set_make_orderbook(dto):
     orderbook = []
     for i, row in bidding_curve.iterrows():
         order = {
-            "bid_id":  f"{dto['bid_id']}_{i + 1}",
+            # "bid_id":  f"{dto['bid_id']}_{i + 1}",
+            "bid_id": f"{GLOBAL_PROFILE_ID}_{dto['bid_id']}_{i + 1}",
             "slot":    i + 1,
             "volume":  row["volume"],
             "price":   row["marginal_price_per_kwh"],
@@ -833,16 +836,33 @@ async def step4_retrieve_market_clearing_info(dto):
 
 
 async def step_publish_battery_schedule(dto):
-    step = next(s for s in dto.trace if s["step"] == "market_clearing")
-    accepted_volume_kwh = step["metadata"]["accepted_volume_kwh"]
-
-    charge_series = dto.get("buc_charge_series",)
-    schedule = charge_series.get(int(accepted_volume_kwh), None)
-
     print("STEPS: step_publish_battery_schedule started")
 
-    if dto.get("storage_size_kwh", 0) <= 0:
-        print('STEPS: not a seller, skipping battery schedule publishing')
+
+    # Get storage size directly from profile tool
+    tool_get_profile = next(
+        t for t in tool_registry.tools if t.__name__ == "get_profile_metadata"
+    )
+    result_profile = await run_blocking(tool_get_profile, GLOBAL_PROFILE_ID)
+    storage_size_kwh = result_profile.get("battery_size_kwh", 0.0)
+
+    print(f"STEPS: GLOBAL_PROFILE_ID={GLOBAL_PROFILE_ID}, battery_size_kwh={storage_size_kwh}")
+
+
+    if storage_size_kwh <= 0:
+        print("STEPS: not a seller, skipping battery schedule publishing")
+        return dto
+
+    # Safely get accepted volume from trace
+    step = next((s for s in dto.trace if s["step"] == "market_clearing"), None)
+    if step is None:
+        print("STEPS: no market_clearing trace found, skipping")
+        return dto
+
+    accepted_volume_kwh = step["metadata"].get("accepted_volume_kwh", 0)
+    if accepted_volume_kwh == 0:
+        print("STEPS: accepted volume is 0, no schedule to send")
+        dto.log_step("publish_battery_schedule", "No volume accepted — schedule not sent.")
         return dto
 
     buc_charge_series = dto.get("buc_charge_series")
@@ -858,7 +878,6 @@ async def step_publish_battery_schedule(dto):
     mqtt_agent_battery.send_power_request_to_battery(power_request)
 
     print("STEPS: battery schedule published successfully")
-
     dto.log_step(
         "publish_battery_schedule",
         "Sent the battery charging/discharging schedule to the physical battery via MQTT.",
@@ -868,7 +887,6 @@ async def step_publish_battery_schedule(dto):
         }
     )
     return dto
-
 
 # ---------------------------------------------------------------------------
 # STEP MAP
@@ -893,6 +911,6 @@ STEP_MAP = {
     ],
     "market_clearing": [
         step4_retrieve_market_clearing_info,
-        # step_publish_battery_schedule,
+        step_publish_battery_schedule,
     ],
 }
