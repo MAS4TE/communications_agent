@@ -125,7 +125,7 @@ async def lifespan(app: FastAPI):
     app.state.loop = loop
 
     # --- MQTT config ---
-    ONLINE = True  # Switch to True for live broker
+    ONLINE = False  # Switch to True for live broker
 
     if ONLINE:
         credentials_yml = "mas4tecontroller_mqtt_credentials.yml"

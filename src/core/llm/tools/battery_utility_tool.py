@@ -162,7 +162,7 @@ def battery_utility_calculator(
     """
     battery_calc_service = BatteryUtilityCalculator()
 
-    print(f"  [BUC tool] candidate={storages_to_calculate} kWh | baseline={baseline_storage} kWh | goal={goal}")
+    # print(f"  [BUC tool] candidate={storages_to_calculate} kWh | baseline={baseline_storage} kWh | goal={goal}")
 
     # Build a datetime index matching the length of the input timeseries.
     # Fallback sample data (5 hours) is used when no real data is provided,
@@ -178,7 +178,7 @@ def battery_utility_calculator(
     community = _ensure_series(community_prices, index) if community_prices is not None else pd.Series([0.10, 0.11, 0.13, 0.12, 0.09], index=default_index)
     wholesale = _ensure_series(wholesale_prices, index) if wholesale_prices is not None else pd.Series([0.06, 0.07, 0.09, 0.08, 0.05], index=default_index)
 
-    print('[BUC tool] after ensure_series')
+    # print('[BUC tool] after ensure_series')
 
     start_time = time.time()
     try:
