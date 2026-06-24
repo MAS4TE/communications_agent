@@ -170,7 +170,7 @@
 
     /* ── BATTERY RESERVE SLIDER ── */
     #battery-reserve-section {
-      display: none; /* shown dynamically when profile has battery */
+      display: none;
     }
     .reserve-slider-wrap { padding: 0 2px; }
     .reserve-track {
@@ -178,14 +178,12 @@
       background: var(--border); border-radius: 6px;
       overflow: visible; margin: 0 4px;
     }
-    /* the "keep" zone fills from left */
     .reserve-keep-fill {
       position: absolute; left: 0; top: 0; height: 100%;
       background: #10a37f; border-radius: 6px 0 0 6px;
       transition: width 0.2s ease;
       pointer-events: none;
     }
-    /* the "tradeable" zone fills from keep to right */
     .reserve-trade-fill {
       position: absolute; top: 0; height: 100%;
       background: #6366f1; border-radius: 0 6px 6px 0;
@@ -313,33 +311,18 @@
       <div id="panel-prefs" class="tab-content">
         <div class="panel-body">
 
-          <!-- RISK SCORE — commented out for now
-          <div class="pref-section">
-            <label>Risk Score</label>
-            <div class="step-slider-wrap">
-              <div class="step-track">
-                <div class="step-fill" id="risk-fill"></div>
-                <div class="step-dots" id="risk-dots"></div>
-                <input type="range" class="step-range" id="risk-range" min="0" max="2" step="1" value="1">
-              </div>
-              <div class="step-labels" id="risk-labels"></div>
-            </div>
-          </div>
-          -->
-
           <div class="pref-section">
             <label>Trading Preference</label>
             <div class="step-slider-wrap">
               <div class="step-track">
                 <div class="step-fill" id="pref-fill"></div>
                 <div class="step-dots" id="pref-dots"></div>
-                <input type="range" class="step-range" id="pref-range" min="0" max="1" step="1" value="1">
+                <input type="range" class="step-range" id="pref-range" min="0" max="1" step="1" value="0">
               </div>
               <div class="step-labels" id="pref-labels"></div>
             </div>
           </div>
 
-          <!-- EXPERTISE LEVEL — commented out for now -->
           <div class="pref-section">
             <label>Expertise Level</label>
             <div class="step-slider-wrap">
@@ -351,7 +334,18 @@
               <div class="step-labels" id="expertise-labels"></div>
             </div>
           </div>
-          
+
+          <div class="pref-section">
+            <label>Trading Scope</label>
+            <div class="step-slider-wrap">
+              <div class="step-track">
+                <div class="step-fill" id="border-fill"></div>
+                <div class="step-dots" id="border-dots"></div>
+                <input type="range" class="step-range" id="border-range" min="0" max="2" step="1" value="2">
+              </div>
+              <div class="step-labels" id="border-labels"></div>
+            </div>
+          </div>
 
           <!-- BATTERY RESERVE — only shown when profile has a home battery -->
           <div class="pref-section" id="battery-reserve-section">
@@ -364,7 +358,6 @@
                 <input type="range" class="reserve-range" id="reserve-range"
                   min="0" max="100" step="5" value="20">
               </div>
-              <!-- kWh display shown once battery capacity is known -->
               <div id="reserve-kwh-row" style="display:none; margin-top:6px;">
                 <div style="text-align:center; font-size:0.75rem; color:var(--text-muted);">
                   Based on your
@@ -383,7 +376,7 @@
                     <div class="reserve-legend-dot" style="background:#6366f1;"></div>
                     <span>Trade <strong id="reserve-trade-pct">80%</strong><span id="reserve-trade-label"></span></span>
                 </div>
-            </div>
+              </div>
             </div>
           </div>
 
@@ -435,18 +428,17 @@
             <div class="profile-field-label">Battery capacity</div>
             <span class="profile-number" id="profile-battery-capacity">—</span>
           </div>
+          <div class="profile-field">
+            <div class="profile-field-label">Location</div>
+            <span class="profile-badge" id="profile-location">—</span>
+          </div>
         </div>
       </div>
     </div>
   </div>
 
   <script>
-    // ── STEP SLIDER DATA (risk & expertise kept for future use) ──
-    const RISK_STEPS = [
-      { label: 'Low',    color: '#10a37f' },
-      { label: 'Medium', color: '#f59e0b' },
-      { label: 'High',   color: '#ef4444' },
-    ];
+    // ── SLIDER DATA ──
     const PREF_STEPS = [
       { label: 'Profit', color: '#6366f1' },
       { label: 'Green',  color: '#22c55e' },
@@ -456,20 +448,24 @@
       { label: 'Intermediate', color: '#f59e0b' },
       { label: 'Expert',       color: '#6366f1' },
     ];
+    const BORDER_STEPS = [
+      { label: 'Community', color: '#10a37f' },
+      { label: 'Country',   color: '#f59e0b' },
+      { label: 'All',       color: '#6366f1' },
+    ];
 
-    // commented-out sliders still track state so save payload stays consistent
-    let riskValue      = 1;
-    let prefValue      = 1; //0 is profit, 1 is green
+    let prefValue      = 0; // 0 = profit, 1 = green
     let expertiseValue = 0;
-    let batteryReserve = 20;      // % to always keep
-    let batteryCapacityKwh = null; // filled from profile if available
+    let borderValue    = 2; // 0 = community, 1 = country, 2 = all
+    let batteryReserve = 20;
+    let batteryCapacityKwh = null;
 
     // ── STEP SLIDER BUILDER ──
     function buildSlider(dotsId, labelsId, fillId, rangeId, steps, getValue, setValue) {
       const dotsEl   = document.getElementById(dotsId);
       const labelsEl = document.getElementById(labelsId);
       const rangeEl  = document.getElementById(rangeId);
-      if (!dotsEl || !labelsEl || !rangeEl) return; // guard for commented-out elements
+      if (!dotsEl || !labelsEl || !rangeEl) return;
 
       dotsEl.innerHTML = '';
       steps.forEach((_, i) => {
@@ -534,7 +530,6 @@
       document.getElementById('reserve-trade-fill').style.width = trade + '%';
       document.getElementById('reserve-thumb').style.left       = keep  + '%';
 
-      // round corners on edge cases
       const keepFill  = document.getElementById('reserve-keep-fill');
       const tradeFill = document.getElementById('reserve-trade-fill');
       keepFill.style.borderRadius  = keep  === 100 ? '6px' : '6px 0 0 6px';
@@ -542,7 +537,6 @@
       tradeFill.style.display      = trade === 0 ? 'none' : 'block';
       keepFill.style.display       = keep  === 0 ? 'none' : 'block';
 
-      // kWh breakdown if capacity is known
       if (batteryCapacityKwh) {
         const keepKwh  = ((keep  / 100) * batteryCapacityKwh).toFixed(1);
         const tradeKwh = ((trade / 100) * batteryCapacityKwh).toFixed(1);
@@ -554,23 +548,22 @@
     }
 
     function updateSummary() {
-      // risk and expertise commented out but values still available
       const p = PREF_STEPS[prefValue].label;
+      const b = BORDER_STEPS[borderValue].label;
+      const scopeIcon = borderValue === 0 ? '🏘️' : borderValue === 1 ? '🇪🇺' : '🌍';
       let html = `Strategy: <span>${p === 'Green' ? '🌱 Green' : '💰 Profit'}</span>`;
-      // if (document.getElementById('battery-reserve-section').style.display !== 'none') {
+      html += ` · <span>${scopeIcon} ${b}</span>`;
       if (document.getElementById('battery-reserve-section').style.display === 'block') {
         const trade = 100 - batteryReserve;
         html += ` · <span>🔋 Keep ${batteryReserve}% · Trade ${trade}%</span>`;
       }
-      
       document.getElementById('pref-summary').innerHTML = html;
     }
 
     function initSliders() {
-      // risk and expertise sliders are commented out in HTML but kept here for when re-enabled
-      // buildSlider('risk-dots','risk-labels','risk-fill','risk-range', RISK_STEPS, ()=>riskValue, v=>{riskValue=v;});
       buildSlider('pref-dots','pref-labels','pref-fill','pref-range', PREF_STEPS, ()=>prefValue, v=>{prefValue=v;});
       buildSlider('expertise-dots','expertise-labels','expertise-fill','expertise-range', EXPERTISE_STEPS, ()=>expertiseValue, v=>{expertiseValue=v;});
+      buildSlider('border-dots','border-labels','border-fill','border-range', BORDER_STEPS, ()=>borderValue, v=>{borderValue=v;});
       initBatteryReserveSlider();
     }
 
@@ -593,29 +586,28 @@
         setBadge('profile-solar',    d.solar_panels);
         setBadge('profile-water',    d.electric_water_heating);
         setBadge('profile-battery',  d.home_battery);
-       
+        if (d.location) {
+          const locEl = document.getElementById('profile-location');
+          locEl.textContent = d.location;
+          locEl.style.background = 'var(--bg)';
+          locEl.style.color = 'var(--text)';
+          locEl.style.border = '1px solid var(--border)';
+        }
 
-        // Battery reserve section: only show if profile has a home battery
         if (d.home_battery) {
           document.getElementById('battery-reserve-section').style.display = 'block';
-
-          // If the profile includes battery capacity in kWh, wire it up
           if (d.battery_capacity_kwh != null) {
             batteryCapacityKwh = d.battery_capacity_kwh;
             document.getElementById('reserve-capacity-label').textContent = d.battery_capacity_kwh + ' kWh';
             document.getElementById('reserve-kwh-row').style.display = 'block';
-            // also show it in the profile tab
             document.getElementById('profile-battery-capacity-row').style.display = 'flex';
             document.getElementById('profile-battery-capacity').textContent = d.battery_capacity_kwh + ' kWh';
           }
-
           refreshReserve();
         }
-      } 
+      }
       catch(e) {
-        // Keep placeholder values until endpoint is ready.
-        // For development: simulate a battery profile so the slider is visible.
-        // Remove the block below once the real endpoint is live.
+        // Fallback for development: show battery slider even without live endpoint
         document.getElementById('battery-reserve-section').style.display = 'block';
         refreshReserve();
       }
@@ -636,11 +628,10 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            // risk: RISK_STEPS[riskValue].label,         // commented out for now
-            trading_preference: PREF_STEPS[prefValue].label,
-            // battery_reserve_pct: batteryReserve,
+            trading_preference:   PREF_STEPS[prefValue].label,
             battery_tradeable_pct: 100 - batteryReserve,
-            expertise: EXPERTISE_STEPS[expertiseValue].label, 
+            expertise:            EXPERTISE_STEPS[expertiseValue].label,
+            trading_scope:        BORDER_STEPS[borderValue].label,
           })
         });
         if (!res.ok) throw new Error();
@@ -682,10 +673,10 @@
           body: JSON.stringify({
             message: msg,
             preferences: {
-              // risk: RISK_STEPS[riskValue].label,    // commented out for now
-              trading_preference: PREF_STEPS[prefValue].label,
-              //battery_reserve_pct: batteryReserve,
+              trading_preference:    PREF_STEPS[prefValue].label,
               battery_tradeable_pct: 100 - batteryReserve,
+              expertise:             EXPERTISE_STEPS[expertiseValue].label,
+              trading_scope:         BORDER_STEPS[borderValue].label,
             }
           })
         });

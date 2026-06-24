@@ -47,5 +47,5 @@ def process_chat(
     The message is processed by an AI assistant that can provide information
     about battery status and answer questions related to solar batteries.
     """
-    reply = service.process_message(req.message)
+    reply = service.process_message(req.message, req.preferences)
     return {"response": reply}

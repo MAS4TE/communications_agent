@@ -3,23 +3,29 @@ import pandas as pd
 from battery_utility_calculator import (
     Storage,
     calculate_multiple_storage_worth,
+    calculate_multiple_storage_worth_by_location,
 )
+
+KNOWN_SELLER_LOCATIONS = ["aachen", "juelich", "heerlen", "liege"]
+
+LOCATION_COUNTRY = {
+    "aachen":  "germany",
+    "juelich": "germany",
+    "heerlen": "netherlands",
+    "liege":   "belgium",
+}
+
+def _resolve_locations(trading_scope: str, my_location: str, all_locations: list[str]) -> list[str]:
+    if trading_scope == "Community":
+        return [my_location]
+    if trading_scope == "Country":
+        my_country = LOCATION_COUNTRY.get(my_location.lower())
+        return [loc for loc in all_locations if LOCATION_COUNTRY.get(loc) == my_country]
+    # "All"
+    return all_locations
 
 
 class BatteryUtilityCalculator:
-    """
-    Wrapper around the battery_utility_calculator library for single-candidate worth calculation.
-
-    Computes the 'worth' of a candidate storage configuration compared to a baseline,
-    where worth = cost(baseline) - cost(candidate), i.e. how much better off the
-    prosumer is with the candidate storage vs the baseline.
-
-    This class is intentionally kept simple — it handles one baseline vs one candidate.
-    The step function is responsible for:
-      - deciding what the baseline and candidate should be (seller vs buyer logic)
-      - looping over volumes
-      - assembling the bidding curve from the collected worth values
-    """
 
     def calculate(
         self,
@@ -31,72 +37,99 @@ class BatteryUtilityCalculator:
         eeg_prices: pd.Series,
         community_prices: pd.Series,
         wholesale_prices: pd.Series,
+        my_location: str = "aachen",
+        is_rented_storage: bool = False,
+        seller_locations: list[str] = KNOWN_SELLER_LOCATIONS,
+        trading_scope: str = "All",
         solver: str = "appsi_highs",
         goal: str = "max_cashflow",
         return_charge_timeseries: bool = False,
     ) -> dict:
-        """
-        Calculate the worth of a candidate storage vs a baseline storage.
 
-        The worth represents different things depending on the role of the prosumer:
+        if is_rented_storage:
+            locations_to_calculate = _resolve_locations(trading_scope, my_location.lower(), seller_locations)
+            community_market_prices = {loc: community_prices for loc in locations_to_calculate}
 
-          Seller: baseline = full battery (self-consuming only)
-                  candidate = full battery minus N kWh being rented out
-                  → worth = opportunity cost of renting out N kWh
-                  → interpretation: minimum price the seller should accept
+            result_by_location = calculate_multiple_storage_worth_by_location(
+                baseline_storage=baseline_storage,
+                storages_to_calculate=storages_to_calculate,
+                locations_to_calculate=locations_to_calculate,
+                demand=demand,
+                solar_generation=solar_generation,
+                supplier_prices=grid_prices,
+                eeg_prices=eeg_prices,
+                community_market_prices=community_market_prices,
+                wholesale_market_prices=wholesale_prices,
+                my_location=my_location,
+                solver=solver,
+                goal=goal,
+                return_charge_timeseries=return_charge_timeseries,
+            )
 
-          Buyer:  baseline = 0 kWh (no storage at all)
-                  candidate = N kWh of virtual storage being purchased
-                  → worth = energy cost savings from having N kWh available
-                  → interpretation: maximum price the buyer should be willing to pay
+            result_without_location = calculate_multiple_storage_worth(
+                baseline_storage=baseline_storage,
+                storages_to_calculate=storages_to_calculate,
+                demand=demand,
+                solar_generation=solar_generation,
+                supplier_prices=grid_prices,
+                eeg_prices=eeg_prices,
+                community_market_prices={my_location: community_prices},
+                wholesale_market_prices=wholesale_prices,
+                my_location=my_location,
+                is_rented_storage=True,
+                solver=solver,
+                goal=goal,
+                return_charge_timeseries=False,
+            )
 
-        Args:
-            storage_size_kwh (float): Size of the candidate storage in kWh.
-                For sellers: full_battery - N (what they keep after renting out N kWh).
-                For buyers: N (the virtual storage they are buying).
-            baseline_storage_kwh (float): Size of the baseline storage in kWh.
-                For sellers: their full battery size (reference = keeping everything).
-                For buyers: 0 (reference = no storage).
-            demand (pd.Series): Demand timeseries in kWh per hour.
-            solar_generation (pd.Series): Solar generation timeseries in kWh per hour.
-            grid_prices (pd.Series): Supplier/grid electricity prices in EUR/kWh.
-            eeg_prices (pd.Series): EEG feed-in prices in EUR/kWh.
-            community_prices (pd.Series): Community market prices in EUR/kWh.
-            wholesale_prices (pd.Series): Wholesale market prices in EUR/kWh.
-            solver (str): Solver to use for the optimization. Defaults to 'appsi_highs'.
-            goal (str): Optimization goal.
-                'max_cashflow'    → minimize total electricity cost.
-                'max_green_energy' → maximize solar self-consumption.
-            return_charge_timeseries (bool): If True, includes the candidate storage's
-                charge/discharge timeseries in the output. Used downstream for MQTT
-                battery scheduling. Defaults to False.
+            print("=== BUYER: BY LOCATION ===")
+            print(result_by_location if isinstance(result_by_location, pd.DataFrame) else result_by_location["results_df"])
+            print("=== BUYER: WITHOUT LOCATION ===")
+            print(result_without_location if isinstance(result_without_location, pd.DataFrame) else result_without_location["results_df"])
 
-        Returns:
-            dict with keys:
-                'worth' (float): EUR value of candidate vs baseline. Positive means
-                    the candidate is better (cheaper for buyers, lower opportunity
-                    cost for sellers).
-                'storage_to_calc_charge_ts' (pd.DataFrame): Only present when
-                    return_charge_timeseries=True. Charge timeseries of the candidate
-                    storage, used for battery scheduling via MQTT.
-        """
+            result = result_by_location
+            if isinstance(result, pd.DataFrame):
+                result = {"results_df": result}
 
-        # Storage constructor: Storage(id, c_rate, volume, efficiency)
-        # id=0 for baseline, id=1 for candidate — these are arbitrary internal identifiers
+        else:
+            result_with_location = calculate_multiple_storage_worth_by_location(
+                baseline_storage=baseline_storage,
+                storages_to_calculate=storages_to_calculate,
+                locations_to_calculate=[my_location],
+                demand=demand,
+                solar_generation=solar_generation,
+                supplier_prices=grid_prices,
+                eeg_prices=eeg_prices,
+                community_market_prices={my_location: community_prices},
+                wholesale_market_prices=wholesale_prices,
+                my_location=my_location,
+                solver=solver,
+                goal=goal,
+                return_charge_timeseries=False,
+            )
 
-        result = calculate_multiple_storage_worth(
-            baseline_storage=baseline_storage,
-            storages_to_calculate=storages_to_calculate,
-            demand=demand,
-            solar_generation=solar_generation,
-            supplier_prices=grid_prices,
-            eeg_prices=eeg_prices,
-            community_market_prices=community_prices,
-            wholesale_market_prices=wholesale_prices,
-            solver=solver,
-            goal = goal, 
-            return_charge_timeseries=return_charge_timeseries,
-        )
+            result = calculate_multiple_storage_worth(
+                baseline_storage=baseline_storage,
+                storages_to_calculate=storages_to_calculate,
+                demand=demand,
+                solar_generation=solar_generation,
+                supplier_prices=grid_prices,
+                eeg_prices=eeg_prices,
+                community_market_prices={my_location: community_prices},
+                wholesale_market_prices=wholesale_prices,
+                my_location=my_location,
+                is_rented_storage=False,
+                solver=solver,
+                goal=goal,
+                return_charge_timeseries=return_charge_timeseries,
+            )
+
+            print("=== SELLER: BY LOCATION ===")
+            print(result_with_location if isinstance(result_with_location, pd.DataFrame) else result_with_location["results_df"])
+            print("=== SELLER: WITHOUT LOCATION ===")
+            print(result if isinstance(result, pd.DataFrame) else result["results_df"])
+
+            if isinstance(result, pd.DataFrame):
+                result = {"results_df": result}
 
         return result
-

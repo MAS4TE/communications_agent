@@ -91,3 +91,5 @@ src/data/
 # credentials
 src/mas4tecontroller_mqtt_credentials.yml
 src/mas4te_mistral_api_key.yml
+src/mas4te_restapi_key.yml
+

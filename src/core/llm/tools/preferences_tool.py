@@ -6,7 +6,7 @@ from api.services.prosumer.prosumer_service import ProsumerService
 @tool(
     schema={
         "name": "get_preferences",
-        "description": "Returns the current trading preferences of the prosumer, including their trading preference, battery tradeable percentage, and expertise level. Always call this when you need to know the prosumer's current preferences — do not assume you already have them.",
+        "description": "Returns the current trading preferences of the prosumer, including their trading preference, battery tradeable percentage, expertise level, and trading scope (Community, Country, or All). Always call this when you need to know the prosumer's current preferences — do not assume you already have them.",
         "parameters": {}
     }
 )

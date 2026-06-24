@@ -23,6 +23,7 @@ from battery_utility_calculator import Storage
 
 from requests.auth import HTTPBasicAuth
 import requests
+import yaml
 
 test_no_fc = False
 _BID_COUNTER = 0
@@ -141,11 +142,14 @@ async def step_test_llm(dto):
 async def step_retrieve_preferences(dto):
     service = ProsumerService()
     preferences = service.get_preferences()
+
+    preferences["trading_preference"]="Green"
+
     dto["preferences"] = preferences
     if dto.get("storage_size_kwh", 0) > 0:
         dto["battery_tradeable_pct"] = preferences.get("battery_tradeable_pct", 50)
 
-    preferences["trading_preference"] = "Green"
+    # preferences["trading_preference"] = "Green"
     print("STEPS: preferences retrieved:", preferences)
     
 
@@ -166,6 +170,8 @@ async def step_retrieve_profile(dto):
     result_profile = await run_blocking(tool_get_profile, GLOBAL_PROFILE_ID)
     print("result profile", result_profile)
     dto["storage_size_kwh"] = result_profile.get("battery_size_kwh", 0.0)
+    dto["location"] = result_profile.get("location", "unknown")
+    print(f"STEPS: location = {dto['location']}")
     # print(dto["storage_size_kwh"])
     role = "seller" if dto["storage_size_kwh"] > 0 else "buyer"
     print('ROLE: ', role)
@@ -578,10 +584,6 @@ async def step_battery_utility_calculator(dto):
     community_prices = community_prices.reindex(demand_index, method="nearest")
     wholesale_prices = wholesale_prices.reindex(demand_index, method="nearest")
 
-    buc_tool = next(
-        t for t in tool_registry.tools if t.__name__ == "battery_utility_calculator"
-    )
-
     common_kwargs = dict(
         demand_series=demand_series,
         solar_series=solar_series,
@@ -590,45 +592,27 @@ async def step_battery_utility_calculator(dto):
         community_prices=community_prices,
         wholesale_prices=wholesale_prices,
     )
-    full_battery_kwh = dto.get("storage_size_kwh", 0)
-    max_volume = dto.get("buc_max_volume", 10)
+
+    buc_tool = next(
+        t for t in tool_registry.tools if t.__name__ == "battery_utility_calculator"
+    )
+
+    full_battery_kwh  = dto.get("storage_size_kwh", 0)
+    my_location       = dto.get("location", "aachen").lower()
+    trading_scope     = dto.get("preferences", {}).get("trading_scope", "All")
+    trading_preference = dto.get("preferences", {}).get("trading_preference", "Profit")
+    goal              = "max_green_energy" if trading_preference == "Green" else "max_cashflow"
 
     if full_battery_kwh > 0:
-        trading_preference = dto.get("preferences", {}).get("trading_preference", "Profit")
-        full_battery_kwh = dto["storage_size_kwh"]
-        tradeable_pct = dto.get("preferences", {}).get("battery_tradeable_pct", 50)
-        max_tradeable    = int(full_battery_kwh * (tradeable_pct / 100))
-        goal               = "max_green_energy" if trading_preference == "Green" else "max_cashflow"
-        side             = "seller"
-
-        volumes = range(1, max_tradeable + 1)
-
-        # print(f"  Role             : SELLER")
-        # print(f"  Full battery     : {full_battery_kwh} kWh")
-        # print(f"  Tradeable        : {tradeable_pct}%  →  max {max_tradeable} kWh offered")
-        # print(f"  Goal             : {goal}")
-        # print(f"  Volumes to test  : 1 – {max_tradeable} kWh offered ({max_tradeable} steps)")
-
+        tradeable_pct         = dto.get("preferences", {}).get("battery_tradeable_pct", 50)
+        max_tradeable         = int(full_battery_kwh * (tradeable_pct / 100))
+        side                  = "seller"
+        storages_to_calculate = [Storage(id=i, c_rate=0.2, volume=i) for i in range(1, int(full_battery_kwh) + 1)]
     else:
-        trading_preference = dto.get("preferences", {}).get("trading_preference", "Profit")
-        goal               = "max_green_energy" if trading_preference == "Green" else "max_cashflow"
-        side               = "buyer"
-
-        # print(f"  Role             : BUYER")
-        # print(f"  Trading pref     : {trading_preference}  →  goal = {goal}")
-
-        dto       = await step_reason_buc_range(dto)
-        max_volume = max_volume
-
-        # print(f"  Candidate range  : {1} – {max_volume} kWh")
-
-    print()
-
-    # storages_to_calculate = [Storage(id=i, c_rate=0.2, volume=i) for i in range(1, max_volume + 1)]
-    if side == "seller":
-        storages_to_calculate = [Storage(id=i, c_rate=0.2, volume=i) for i in range(1, int(full_battery_kwh)+1)]
-    else:
-        storages_to_calculate = [Storage(id=i, c_rate=0.2, volume=i) for i in range(1, max_volume+1)]
+        side  = "buyer"
+        dto   = await step_reason_buc_range(dto)
+        max_volume            = dto.get("buc_max_volume", 10)
+        storages_to_calculate = [Storage(id=i, c_rate=0.2, volume=i) for i in range(1, max_volume + 1)]
 
     result = await run_blocking(
         buc_tool,
@@ -636,48 +620,25 @@ async def step_battery_utility_calculator(dto):
         storages_to_calculate=storages_to_calculate,
         goal=goal,
         return_charge_timeseries=True,
+        my_location=my_location,
+        is_rented_storage=(side == "buyer"),
+        trading_scope=trading_scope,
         **common_kwargs,
     )
-    # print('step buc, print result')
-    # # print(result)
-    # print(result["results_df"].to_string())
 
-    # print("STEPS: building bidding curve ...")
-
-    # bidding_curve = calculate_bidding_curve(
-    #     volumes_worth=result["results_df"][["volume", "worth"]],
-    #     buy_or_sell_side=side,
-    # )
+    results_df = result["results_df"]
+    cols = ["volume", "worth"]
+    if "location" in results_df.columns:
+        cols.append("location")
     bidding_curve = calculate_bidding_curve(
-        volumes_worth=result["results_df"][["volume", "worth"]],
+        volumes_worth=results_df[cols],
         buy_or_sell_side=side,
     )
     if side == "seller":
         bidding_curve = bidding_curve.head(max_tradeable)
 
-    # print()
-    # print(f"  {'Step':>4}  {'Volume (kWh)':>12}  {'Cumul. (kWh)':>12}  {'Marginal (EUR)':>14}  {'EUR/kWh':>10}")
-    # print(f"  {'-'*4}  {'-'*12}  {'-'*12}  {'-'*14}  {'-'*10}")
-    # for i, row in bidding_curve.iterrows():
-    #     print(
-    #         f"  {i+1:>4}  "
-    #         f"{row['volume']:>12.1f}  "
-    #         f"{row['cumulative_volume']:>12.1f}  "
-    #         f"{row['marginal_price']:>14.4f}  "
-    #         f"{row['marginal_price_per_kwh']:>10.4f}"
-    #     )
-
-    # print()
-    # print(
-    #     f"  → {len(bidding_curve)} bid steps | "
-    #     f"total volume: {bidding_curve['cumulative_volume'].max():.1f} kWh | "
-    #     f"price range: {bidding_curve['marginal_price_per_kwh'].min():.4f} – "
-    #     f"{bidding_curve['marginal_price_per_kwh'].max():.4f} EUR/kWh"
-    # )
-    # print("=" * 60)
-
-    dto["bidding_curve"]  = bidding_curve
-    dto["buc_charge_series"] = result["storages_to_calc_charge_ts"]
+    dto["bidding_curve"]     = bidding_curve
+    dto["buc_charge_series"] = result.get("storages_to_calc_charge_ts", {})
 
     dto.log_step(
         "battery_utility_calculator",
@@ -685,6 +646,7 @@ async def step_battery_utility_calculator(dto):
         {
             "tool":                "battery_utility_calculator",
             "role":                side,
+            "trading_scope":       trading_scope,
             "bid_steps":           len(bidding_curve),
             "total_volume_kwh":    round(float(bidding_curve["cumulative_volume"].max()), 2),
             "price_range_eur_kwh": [
@@ -716,13 +678,17 @@ async def step_set_make_orderbook(dto):
 
     orderbook = []
     for i, row in bidding_curve.iterrows():
+        location = row.get("location") or dto.get("location", "uknown")
         order = {
-            # "bid_id":  f"{dto['bid_id']}_{i + 1}",
-            "bid_id": f"{GLOBAL_PROFILE_ID}_{dto['bid_id']}_{i + 1}",
-            "slot":    i + 1,
+            "bid_id": f"{GLOBAL_PROFILE_ID}_{dto['bid_id']}_{location}_{i + 1}",
+            # "bid_id": f"{GLOBAL_PROFILE_ID}_{dto['bid_id']}_{i + 1}",
+            # "slot":    i + 1,
             "volume":  row["volume"],
             "price":   row["marginal_price_per_kwh"],
         }
+        if location:
+            order["location"] = location
+            order["exclusive_id"] = row.get("exclusive_id")
         orderbook.append(order)
         # print(f"  slot {order['slot']:>3}  |  volume={order['volume']:.1f} kWh  |  price={order['price']:.4f} EUR/kWh")
 
@@ -842,37 +808,38 @@ async def step4_retrieve_market_clearing_info(dto):
 
 # if the accepted volume is only a partial bid, re-run BUC for the correct volume
  
-async def _run_buc_for_volume(dto, volume_kwh: float) -> dict:
+async def _run_buc_for_volume(
+    dto,
+    volume_kwh: float,
+    demand_series: pd.Series,
+    solar_series: pd.Series,
+    grid_prices: pd.Series,
+    eeg_prices: pd.Series,
+    community_prices: pd.Series,
+    wholesale_prices: pd.Series,
+) -> dict:
     """Fallback: run BUC for a single exact volume and return a power_request dict."""
     print(f"STEPS: _run_buc_for_volume — running BUC for exact volume {volume_kwh} kWh")
- 
-    demand_series    = _to_1d(dto.get("demand_fc"))
-    solar_series     = _to_1d(dto.get("solar_fc"))
-    grid_prices      = _to_1d(dto.get("prices_fc", {}).get("supplier"))
-    eeg_prices       = _to_1d(dto.get("prices_fc", {}).get("eeg"))
-    community_prices = _to_1d(dto.get("prices_fc", {}).get("community"))
-    wholesale_prices = _to_1d(dto.get("prices_fc", {}).get("wholesale"))
- 
-    demand_index     = demand_series.index
-    solar_series     = solar_series.reindex(demand_index, method="nearest")
-    grid_prices      = grid_prices.reindex(demand_index, method="nearest")
-    eeg_prices       = eeg_prices.reindex(demand_index, method="nearest")
-    community_prices = community_prices.reindex(demand_index, method="nearest")
-    wholesale_prices = wholesale_prices.reindex(demand_index, method="nearest")
- 
+
     trading_preference = dto.get("preferences", {}).get("trading_preference", "Profit")
     goal = "max_green_energy" if trading_preference == "Green" else "max_cashflow"
- 
+
     buc_tool = next(
         t for t in tool_registry.tools if t.__name__ == "battery_utility_calculator"
     )
- 
+
+    my_location = dto.get("location", "aachen").lower()
+    role = "seller" if dto.get("storage_size_kwh", 0) > 0 else "buyer"
+
     result = await run_blocking(
         buc_tool,
         baseline_storage=Storage(id=0, c_rate=0.2, volume=0),
         storages_to_calculate=[Storage(id=volume_kwh, c_rate=0.2, volume=volume_kwh)],
         goal=goal,
         return_charge_timeseries=True,
+        my_location=my_location,
+        is_rented_storage=(role == "buyer"),
+        trading_scope=dto.get("preferences", {}).get("trading_scope", "All"),
         demand_series=demand_series,
         solar_series=solar_series,
         grid_prices=grid_prices,
@@ -880,18 +847,17 @@ async def _run_buc_for_volume(dto, volume_kwh: float) -> dict:
         community_prices=community_prices,
         wholesale_prices=wholesale_prices,
     )
- 
-    charge_series = result["storages_to_calc_charge_ts"]
+
+    charge_series = result.get("storages_to_calc_charge_ts", {})
     power_request = await soc_to_power_request(charge_series)
     print(f"STEPS: _run_buc_for_volume — done, {len(power_request['time_steps'])} timesteps")
     return power_request
- 
 
 # ---------------------------------------------------------------------------
 # step_publish_battery_schedule  (buyers only, matched volume)
 # ---------------------------------------------------------------------------
  
-async def step_publish_battery_schedule(dto):
+async def step_publish_battery_schedule_old(dto):
     print("STEPS: step_publish_battery_schedule started")
 
     tool_get_profile = next(
@@ -940,8 +906,26 @@ async def step_publish_battery_schedule(dto):
     print(f"STEPS: power request — {len(power_request['time_steps'])} timesteps, "
           f"first power: {power_request['power_rate_w'][0]:.2f} W")
 
-    mqtt_agent_battery = get_mqtt_agent_battery()
-    mqtt_agent_battery.send_power_request_to_battery(power_request)
+    # mqtt_agent_battery = get_mqtt_agent_battery()
+    # mqtt_agent_battery.send_power_request_to_battery(power_request)
+
+    # with open("src/mas4te_restapi_key.yml") as f:
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "mas4te_restapi_key.yml")) as f:
+        config = yaml.safe_load(f)
+
+    user = config["api"]["username"]
+    password = config["api"]["password"]
+    
+    r = requests.post(
+        url="https://mas4te.nowum.fh-aachen.de/brp-api/power_request",
+        auth=HTTPBasicAuth(username=user, password=password),
+        json=power_request,
+    )
+
+    print(r.status_code)
+    print(r.json())
+
+
 
     print("STEPS: battery schedule published successfully")
     dto.log_step(
@@ -957,56 +941,225 @@ async def step_publish_battery_schedule(dto):
     return dto
 
 
-async def step_test_send(dto):
+async def test_buyer_schedule(dto):
+    print('STEPS: step test send')
 
-    print('STEPS: step test send ')
-
-    global _TEST_SEND_DONE
-    if _TEST_SEND_DONE:
-        print("STEPS: step_test_send — already sent, skipping")
+    if dto.get("storage_size_kwh", 0) > 0:
+        print("STEPS: this is a seller, skipping battery schedule publishing (buyers only)")
         return dto
-    
 
-    csv_path = os.path.join(DATA_DIR, "charge_timeseries.csv")
-    df = pd.read_csv(csv_path, index_col=0)
-    df.columns = df.columns.str.strip()
-    # df["combined"] = df.sum(axis=1)
+    buc_charge_series = dto.get("buc_charge_series")
+    if not buc_charge_series:
+        print("STEPS: no buc_charge_series found, skipping")
+        dto.log_step("publish_battery_schedule", "No SOC series found — step skipped.")
+        return dto
 
-    # combined_dict = {
-    #     "time_steps": list(range(len(df))),#.index.tolist(), 
-    #     "power_rate_w": df["combined"].tolist(),
-    # }
+    step = next((s for s in dto.trace if s["step"] == "market_clearing"), None)
+    accepted_volume = step["metadata"].get("accepted_volume_kwh", 0) if step else 0
 
-    # combined_dict = {"request_id": "abc", "time_steps": [0, 900, 1800, 2700, 3600, 4500, 5400, 6300, 7200, 8100, 9000, 9900, 10800, 11700, 12600, 13500, 14400, 15300, 16200, 17100, 18000, 18900, 19800, 20700, 21600, 22500, 23400, 24300, 25200, 26100, 27000, 27900, 28800, 29700, 30600, 31500, 32400, 33300, 34200, 35100, 36000, 36900, 37800, 38700, 39600, 40500, 41400, 42300, 43200, 44100, 45000, 45900, 46800, 47700, 48600, 49500, 50400, 51300, 52200, 53100, 54000, 54900, 55800, 56700, 57600, 58500, 59400, 60300, 61200, 62100, 63000, 63900, 64800, 65700, 66600, 67500, 68400, 69300, 70200, 71100, 72000, 72900, 73800, 74700, 75600, 76500, 77400, 78300, 79200, 80100, 81000, 81900, 82800, 83700, 84600, 85500] , "power_rate_w": [0.0, 0.0, 0.0, 0.0, 25000.0, 25000.0, 25000.0, 25000.0, 25000.0, 25000.0, 25000.0, 25000.0, 25000.0, 25000.0, 25000.0, 25000.0, 25000.0, 25000.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -25000.0, -25000.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -25000.0, -25000.0, -25000.0, -25000.0, -25000.0, -25000.0, -25000.0, -25000.0, -25000.0, -25000.0, -25000.0, -25000.0, -25000.0, -25000.0, -25000.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 25000.0]}
-    # payload = {'request_id': 'abc', 'time_steps': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], 'eeg': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 'wholesale': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.02, 0.98, 0.0, 0.0], 'community': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 'home': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]}
-    
+    if accepted_volume == 0:
+        print("STEPS: accepted volume is 0, no schedule to send")
+        dto.log_step("publish_battery_schedule", "No volume accepted — schedule not sent.")
+        return dto
+
+    matched_series = buc_charge_series.get(accepted_volume)
+    if matched_series is not None:
+        print(f"STEPS: exact match found for volume={accepted_volume} kWh — using cache")
+        df = matched_series
+        source = f"cached (exact match={accepted_volume} kWh)"
+    else:
+        print(f"STEPS: no exact match for {accepted_volume} kWh — re-running BUC")
+        df = await _run_buc_for_volume(dto, accepted_volume)
+        source = f"re-computed BUC for exact volume={accepted_volume} kWh"
+        timesteps = df.index.astype(str).tolist()
+
     payload = {
-        "request_id": "abc",
-        "time_steps": df.index.tolist(),
+        "request_id": os.environ.get("AGENT_ID", "unknown"),
+        "time_steps": timesteps,
         "eeg": df["soc_eeg"].tolist(),
         "wholesale": df["soc_wholesale"].tolist(),
         "community": df["soc_community"].tolist(),
         "home": df["soc_home"].tolist()
     }
 
-    user = "bea"
-    password = "17Y2rubsXWgSPybn"
-    
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "mas4te_restapi_key.yml")) as f:
+        config = yaml.safe_load(f)
+
+    user = config["api"]["username"]
+    password = config["api"]["password"]
+
+    r = requests.post(
+    url="https://mas4te.nowum.fh-aachen.de/brp-api/power_request",
+    auth=HTTPBasicAuth(username=user, password=password),
+    json=payload,
+    params={
+        "is_real_world_test": False,  # False = simulation mode (no real battery interaction)
+                                      # True  = real-time mode (sends schedule to physical battery)
+    },
+)
+
+    print(r.status_code)
+    try:
+        print(r.json())
+    except Exception:
+        print("Response body:", r.text)
+
+    print(f"STEPS: step_test_send — sent {len(timesteps)} timesteps")
+
+    dto.log_step(
+        "publish_battery_schedule",
+        "Sent the battery charging/discharging schedule to the API.",
+        {
+            "accepted_volume_kwh": accepted_volume,
+            "schedule_source": source,
+            "timesteps": len(timesteps),
+        }
+    )
+    return dto
+
+
+async def _publish_schedule_buyer(dto) -> None:
+    """
+    Sends SOC schedule to the REST API for buyers.
+    Buyers have no physical battery — they rent storage from the community.
+    The schedule tells the API how the rented storage should be used.
+    """
+    buc_charge_series = dto.get("buc_charge_series")
+    if not buc_charge_series:
+        print("STEPS: no buc_charge_series found, skipping")
+        dto.log_step("publish_battery_schedule", "No SOC series found — step skipped.")
+        return
+
+    step = next((s for s in dto.trace if s["step"] == "market_clearing"), None)
+    accepted_volume = step["metadata"].get("accepted_volume_kwh", 0) if step else 0
+
+    if accepted_volume == 0:
+        print("STEPS: accepted volume is 0, no schedule to send")
+        dto.log_step("publish_battery_schedule", "No volume accepted — schedule not sent.")
+        return
+
+    matched_series = buc_charge_series.get(accepted_volume)
+    if matched_series is not None:
+        print(f"STEPS: exact match found for volume={accepted_volume} kWh — using cache")
+        df = matched_series
+        source = f"cached (exact match={accepted_volume} kWh)"
+    else:
+        print(f"STEPS: no exact match for {accepted_volume} kWh — re-running BUC")
+        df = await _run_buc_for_volume(dto, accepted_volume)
+        source = f"re-computed BUC for exact volume={accepted_volume} kWh"
+
+    timesteps = df.index.astype(str).tolist()
+
+    payload = {
+        "request_id": os.environ.get("AGENT_ID", "unknown"),
+        "time_steps": timesteps,
+        "eeg": df["soc_eeg"].tolist(),
+        "wholesale": df["soc_wholesale"].tolist(),
+        "community": df["soc_community"].tolist(),
+        "home": df["soc_home"].tolist()
+    }
+
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "mas4te_restapi_key.yml")) as f:
+        config = yaml.safe_load(f)
+
     r = requests.post(
         url="https://mas4te.nowum.fh-aachen.de/brp-api/power_request",
-        auth=HTTPBasicAuth(username=user, password=password),
+        auth=HTTPBasicAuth(username=config["api"]["username"], password=config["api"]["password"]),
         json=payload,
+        params={
+            "is_real_world_test": False,  # False = simulation mode (no real battery interaction)
+                                          # True  = real-time mode (sends schedule to physical battery)
+        },
     )
 
     print(r.status_code)
-    print(r.json())
+    try:
+        print(r.json())
+    except Exception:
+        print("Response body:", r.text)
+
+    dto.log_step(
+        "publish_battery_schedule",
+        "Sent the battery charging/discharging schedule to the API (buyer).",
+        {
+            "role": "buyer",
+            "accepted_volume_kwh": accepted_volume,
+            "schedule_source": source,
+            "timesteps": len(timesteps),
+        }
+    )
 
 
-    # mqtt_agent_battery = get_mqtt_agent_battery()
-    # mqtt_agent_battery.send_power_request_to_battery(combined_dict)
-    # _TEST_SEND_DONE = True
+async def _publish_schedule_seller(dto) -> None:
+    """
+    Sends SOC schedule to the physical battery via MQTT for sellers.
+    Sellers own a physical battery — part of it is rented out to buyers (accepted_volume),
+    the remaining capacity is used for their own demand/solar optimization.
+    Only the own-use portion is scheduled here.
+    """
+    storage_size_kwh = dto.get("storage_size_kwh", 0)
+    buc_charge_series = dto.get("buc_charge_series")
 
-    print(f"STEPS: step_test_send — sent {len(df)} timesteps")
+    if not buc_charge_series:
+        print("STEPS: no buc_charge_series found, skipping")
+        dto.log_step("publish_battery_schedule", "No SOC series found — step skipped.")
+        return
+
+    step = next((s for s in dto.trace if s["step"] == "market_clearing"), None)
+    accepted_volume = step["metadata"].get("accepted_volume_kwh", 0) if step else 0
+
+    own_volume = storage_size_kwh - accepted_volume
+    print(f"STEPS: seller — total={storage_size_kwh} kWh, rented={accepted_volume} kWh, own use={own_volume} kWh")
+
+    if own_volume <= 0:
+        print("STEPS: entire battery is rented out, no own-use schedule to send")
+        dto.log_step("publish_battery_schedule", "Entire battery rented out — no own-use schedule sent.")
+        return
+
+    matched_series = buc_charge_series.get(own_volume)
+    if matched_series is not None:
+        print(f"STEPS: exact match found for own_volume={own_volume} kWh — using cache")
+        df = matched_series
+        source = f"cached (exact match={own_volume} kWh)"
+    else:
+        print(f"STEPS: no exact match for own_volume={own_volume} kWh — re-running BUC")
+        df = await _run_buc_for_volume(dto, own_volume)
+        source = f"re-computed BUC for own_volume={own_volume} kWh"
+
+    power_request = await soc_to_power_request({own_volume: df})
+
+    mqtt_agent_battery = get_mqtt_agent_battery()
+    mqtt_agent_battery.send_power_request_to_battery(power_request)
+
+    print(f"STEPS: seller schedule sent via MQTT — {len(power_request['time_steps'])} timesteps")
+
+    dto.log_step(
+        "publish_battery_schedule",
+        "Sent own-use battery schedule to physical battery via MQTT (seller).",
+        {
+            "role": "seller",
+            "total_battery_kwh": storage_size_kwh,
+            "rented_out_kwh": accepted_volume,
+            "own_use_kwh": own_volume,
+            "schedule_source": source,
+            "timesteps": len(power_request["time_steps"]),
+        }
+    )
+
+
+async def step_publish_battery_schedule(dto):
+    """
+    Routes to the correct schedule publishing function based on role.
+    - Buyers: send SOC schedule to REST API (rented storage)
+    - Sellers: send own-use SOC schedule to physical battery via MQTT
+    """
+    print("STEPS: step_publish_battery_schedule started")
+
+    if dto.get("storage_size_kwh", 0) > 0:
+        await _publish_schedule_seller(dto)
+    else:
+        await _publish_schedule_buyer(dto)
+
     return dto
 
 
@@ -1034,6 +1187,5 @@ STEP_MAP = {
     "market_clearing": [
         step4_retrieve_market_clearing_info,
         step_publish_battery_schedule,
-        # step_test_send,
     ],
 }

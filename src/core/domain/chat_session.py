@@ -19,10 +19,14 @@ class SolarChatSession:
         self.prompt = prompt
         self.messages = [{"role": "system", "content": self.prompt}]
 
-    def process_message(self, user_message: str):
+    def process_message(self, user_message: str, preferences: dict = None):
         from api.services.prosumer.prosumer_service import ProsumerService
         service = ProsumerService()
-        prefs = service.get_preferences()
+        prefs = preferences or {
+            "trading_preference": "Profit",
+            "battery_tradeable_pct": 80,
+            "expertise": "Beginner"
+        }
         profile = service.get_profile()
 
         if profile.get("home_battery"):
