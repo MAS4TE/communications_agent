@@ -1075,10 +1075,18 @@ async def _publish_schedule_buyer(dto) -> None:
     )
 
     print(r.status_code)
-    try:
-        print(r.json())
-    except Exception:
-        print("Response body:", r.text)
+
+    # TODO: implement error handling for API call
+    # if status code is in range from 200 to 299 (it will most likely be always 200, though), everything is fine and worked,
+    # and has been sent to FZJ MQTT
+    if r.status_code in list(range(200, 299)):
+        pass
+    elif r.status_code == 422:
+        # check_payload_format()
+        pass
+    elif r.status_code == 401:
+        # check_authorization()
+        pass
 
     dto.log_step(
         "publish_battery_schedule",
