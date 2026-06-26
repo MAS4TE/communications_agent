@@ -20,16 +20,7 @@ subprocess.Popen(
 )
 print("Chronos started!")
 
-# Assume
-assume_cwd    = os.path.join(ROOT, "assume", "assume", "mas4te")
-assume_python = os.path.join(assume_cwd, "venv", "Scripts", "python.exe")
 
-subprocess.Popen(
-    ["cmd", "/k", assume_python, "simulation.py"],
-    cwd=assume_cwd,
-    creationflags=subprocess.CREATE_NEW_CONSOLE
-)
-print("Assume started!")
 
 # Battery
 battery_cwd    = os.path.join(ROOT, "mas4te_battery", "battery_simulation")
@@ -71,11 +62,29 @@ for agent in agents:
     env["AGENT_ID"]   = agent["AGENT_ID"]
 
     subprocess.Popen(
-        [agents_python, "start_agents.py"],
+        [sys.executable, "-m", "uvicorn", "main:app", "--port", str(port)],
         cwd=agents_src,
         env=env,
         creationflags=subprocess.CREATE_NEW_CONSOLE
     )
     print(f"{agent['AGENT_ID']}  (profile {agent['PROFILE_ID']})  →  port {port}")
+
+
+time.sleep(1)
+
+# Assume
+assume_cwd    = os.path.join(ROOT, "assume")
+assume_python = os.path.join(assume_cwd, ".assume-venv", "Scripts", "python.exe")
+
+print(assume_cwd)
+print(assume_python)
+print( ["cmd", "/k", assume_python, "mas4te/simulation.py"])
+
+subprocess.Popen(
+    ["cmd", "/k", assume_python, "mas4te/simulation.py"],
+    cwd=assume_cwd,
+    creationflags=subprocess.CREATE_NEW_CONSOLE
+)
+print("Assume started!")
 
 print("\nAll systems launched!")

@@ -143,7 +143,7 @@ async def step_retrieve_preferences(dto):
     service = ProsumerService()
     preferences = service.get_preferences()
 
-    preferences["trading_preference"]="Green"
+    # preferences["trading_preference"]="Green"
 
     dto["preferences"] = preferences
     if dto.get("storage_size_kwh", 0) > 0:
@@ -608,11 +608,13 @@ async def step_battery_utility_calculator(dto):
         max_tradeable         = int(full_battery_kwh * (tradeable_pct / 100))
         side                  = "seller"
         storages_to_calculate = [Storage(id=i, c_rate=0.2, volume=i) for i in range(1, int(full_battery_kwh) + 1)]
+        # storages_to_calculate = [Storage(id=i, c_rate=0.2, volume=i) for i in range(1, 3)]
     else:
         side  = "buyer"
         dto   = await step_reason_buc_range(dto)
         max_volume            = dto.get("buc_max_volume", 10)
         storages_to_calculate = [Storage(id=i, c_rate=0.2, volume=i) for i in range(1, max_volume + 1)]
+        # storages_to_calculate = [Storage(id=i, c_rate=0.2, volume=i) for i in range(1, 3)]
 
     result = await run_blocking(
         buc_tool,
@@ -727,7 +729,7 @@ async def step_publish_bid(dto):
     mqtt_agent_assume = get_mqtt_agent_assume()
     mqtt_agent_assume.send_orderbook_to_market(orderbook)
 
-    # print("STEPS: bid published successfully")
+    print("STEPS: bid published successfully")
 
     dto.log_step(
         "publish_bid",

@@ -61,6 +61,7 @@ class MqttAgentAssume:
                 print(f"MQTT: Ignored message on clearing topic: {payload.get('ack', 'unknown')}")
         
         if job:
+            print('creating job for pipeline manager')
             asyncio.run_coroutine_threadsafe(
                 self.pipeline_manager.enqueue(job),
                 self.loop
