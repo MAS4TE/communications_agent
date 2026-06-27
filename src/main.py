@@ -1,207 +1,43 @@
-"""Main FastAPI application."""
+"""The communication agent as a FastAPI app.
+
+One process = one agent = one prosumer. Which prosumer is decided by the
+PROFILE_ID and AGENT_ID environment variables (see config.py). Run several at
+once with start_agents.py.
+
+Run a single agent directly with:
+
+    cd src
+    PROFILE_ID=84 AGENT_ID=S_01 uvicorn main:app --port 8002
+
+On startup the app builds the Agent (which loads the profile, builds the LLM and
+connects to MQTT) and stores it on app.state for the HTTP routes to use.
 """
-How to run? 
-Open a terminal per agent (for now)
-
-Windows: 
-Agent 1: Buy
-set PROFILE_ID=3
-set AGENT_ID=B_01
-uvicorn main:app --port 8002
-
-Agent 2: Buy
-set PROFILE_ID=152
-set AGENT_ID=B_02
-uvicorn main:app --port 8003
-
-Agent 1: Sell
-set PROFILE_ID=84
-set AGENT_ID=S_01
-uvicorn main:app --port 8004
-
-Agent 2: Sell
-set PROFILE_ID=92
-set AGENT_ID=S_02
-uvicorn main:app --port 8005
-
-
-OR 
-
-python start_agents.py
-
-
-"""
-
 from contextlib import asynccontextmanager
-import os
-import threading
-import yaml
+
+import asyncio
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from fastapi import Request
 
-from api.api_router import api_router
-from api.services.cpu.cpu_service import CPUService
-from configs.settings import Settings
-from core.llm.factory import LLMFactory
-from core.llm.tools.registry import tool_registry
-import core.llm.tools
-
-from core.pipeline.manager import PipelineManager
-from core.pipeline.steps import STEP_MAP
-
-from core.mqtt.agent_client_battery import MqttAgentBattery
-from core.mqtt.agent_client_assume import MqttAgentAssume
-import asyncio
-
-from core.main_context import GLOBAL_PROFILE_ID
-from core.main_context import set_mqtt_agent_battery, set_mqtt_agent_assume
-from api.services.chat.chat_service import ChatService
-from core.llm.prompts import build_system_message
-from core.main_context import set_llm
+import config
+from agent import Agent
+from api import router
 
 
-apikey_path = os.path.join(os.path.dirname(__file__), "mas4te_mistral_api_key.yml")
-if os.path.exists(apikey_path):
-    with open(apikey_path) as f:
-        key = yaml.safe_load(f)
-    os.environ["MISTRAL_API_KEY"] = key.get("mistral_api_key", "")
-
-settings = Settings()
-
-
-# Lifespan handler for startup and shutdown
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # --- Startup logic ---
-    profile_id = int(os.environ.get("PROFILE_ID", 152))
-    agent_id = os.environ.get("AGENT_ID", "B_01")
-    app.state.profile_id = profile_id
-    app.state.agent_id = agent_id
-
-    # Initialize LLM
-    factory = LLMFactory()
-    config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), settings.LLM_CONFIG_PATH)
-    llm = factory.create_from_yaml(config_path, agentic=True)
-
-    # Set up tools
-    llm.tools = tool_registry.tools
-    llm.schemas = tool_registry.schemas
-
-    # Store in app state
-    app.state.llm = llm
-    app.state.chat_service = ChatService(
-        llm=llm,
-        prompt=build_system_message()
+    config.load_api_keys()
+    agent = Agent(
+        profile_id=config.PROFILE_ID,
+        agent_id=config.AGENT_ID,
+        loop=asyncio.get_running_loop(),
     )
-
-    set_llm(llm)
-
-    app.state.settings = settings
-
-    # Start CPU logging in background thread
-    cpu_service = CPUService()
-    thread = threading.Thread(
-        target=cpu_service.log_cpu_usage,
-        kwargs={"interval_minutes": 1, "log_path": "data/cpu_history"},
-        daemon=True
-    )
-    thread.start()
-
-    # --- Pipeline ---
-    # 1. Create the pipeline manager
-    pipeline = PipelineManager(step_map=STEP_MAP)
-
-    # 2. Start the pipeline worker (runs jobs in the background)
-    await pipeline.start_worker()
-
-    # 3. Store the pipeline manager in app state for access in routes
-    app.state.pipeline = pipeline
-    # Enqueue a job immediately on startup
-    # await pipeline.enqueue({})  # this triggers the steps automatically
-
-    loop = asyncio.get_running_loop()
-    app.state.loop = loop
-
-    # --- MQTT config ---
-    ONLINE = False  # Switch to True for live broker
-
-    if ONLINE:
-        credentials_yml = "mas4tecontroller_mqtt_credentials.yml"
-        with open(credentials_yml) as credentials_file:
-            credentials = yaml.safe_load(credentials_file)
-        battery_broker = "ese-mqtt.ice.kfa-juelich.de"
-        battery_port = 8883
-        username = credentials["username"]
-        password = credentials["password"]
-    else:
-        battery_broker = "localhost"
-        battery_port = 1883
-        username = None
-        password = None
-
-    # mqtt agent startup: connection to battery model
-    mqtt_agent_battery = MqttAgentBattery(
-        broker=battery_broker,
-        port=battery_port,
-        agent_id=agent_id,
-        pipeline_manager=pipeline,
-        loop=loop,
-        username=username,
-        password=password,
-        battery_id="mas4te_1"
-    )
-    mqtt_agent_battery.start(tls=ONLINE)  # TLS only when online
-    set_mqtt_agent_battery(mqtt_agent_battery)
-
-    # mqtt agent startup: connection to assume (always localhost)
-    mqtt_agent_assume = MqttAgentAssume(
-        broker="localhost",
-        port=1883,
-        agent_id=agent_id,
-        pipeline_manager=pipeline,
-        loop=loop
-    )
-    mqtt_agent_assume.start()
-    set_mqtt_agent_assume(mqtt_agent_assume)
-
+    agent.connect()
+    app.state.agent = agent
+    print(f"AGENT {agent.agent_id} (profile {agent.profile_id}) ready")
     yield
 
-    # --- Shutdown logic (if needed) ---
-    # mqtt_agent_battery.client.loop_stop()
-    # mqtt_agent_assume.client.loop_stop()
 
-
-# Create FastAPI app with lifespan
-app = FastAPI(
-    title="Solar Battery Assistant API",
-    description="API for monitoring and interacting with a solar battery system, including both direct data access and a conversational assistant interface.",
-    version="0.1.0",
-    lifespan=lifespan,
-    openapi_tags=[
-        {"name": "battery", "description": "Operations related to battery monitoring and status"},
-        {"name": "chat", "description": "Chat interface with AI assistant for natural language interactions"}
-    ]
-)
-
-# Mount static files directory
-project_root = os.path.dirname(__file__)
-static_dir = os.path.join(project_root, "static")
-
-if not os.path.isdir(static_dir):
-    raise RuntimeError(f"Static directory not found at {static_dir}")
-
-app.mount("/static", StaticFiles(directory=static_dir), name="static")
-
-# Include API routes
-app.include_router(api_router)
-
-# GLOBAL_PROFILE_ID = 3
-# app.state.global_profile_id = GLOBAL_PROFILE_ID
-
-# @app.get("/run_test_pipeline")
-# async def run_test_pipeline(request: Request):
-#     # Enqueue a job with empty data
-#     job_id = await request.app.state.pipeline.enqueue({})
-#     return {"job_id": job_id, "status": "queued"}
+app = FastAPI(title="MAS4TE Communication Agent", version="0.1.0", lifespan=lifespan)
+app.mount("/static", StaticFiles(directory=config.STATIC_DIR), name="static")
+app.include_router(router)

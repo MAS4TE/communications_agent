@@ -1,9 +1,0 @@
-llm:
-  default: "mistral"
-  mistral:
-    name: "mistral"
-    model_name: "mistral-small-latest"
-    base_url: "https://api.mistral.ai/v1"
-    temperature: 0.0
-    max_tokens: 512
-    request_timeout: 120

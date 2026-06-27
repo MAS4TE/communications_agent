@@ -284,7 +284,6 @@
         <div class="header-subtitle">Smart Energy Management</div>
       </div>
     </div>
-    <div id="battery-indicator"></div>
   </header>
 
   <div class="main-layout">
@@ -651,9 +650,8 @@
       loadProfile();
       document.getElementById('chat-box').innerHTML = `
         <div class="message assistant-message">
-          Hello! I'm your MAS4TE Assistant. You can ask me about your battery status, energy consumption, or actions on the market.
+          Hello! I'm your MAS4TE Assistant. You can ask me about your energy consumption or actions on the market.
         </div>`;
-      fetchBatteryStatus();
     };
 
     // ── CHAT ──
@@ -688,19 +686,6 @@
         chatBox.innerHTML += `<div class="message assistant-message">Sorry, there was an error. Please try again.</div>`;
       }
       chatBox.scrollTop = chatBox.scrollHeight;
-      fetchBatteryStatus();
-    }
-
-    async function fetchBatteryStatus() {
-      try {
-        const res = await fetch('/battery/status');
-        const d = await res.json();
-        const pct = Math.round(d.percent);
-        const charging = d.status === 'charging' ? ' ⚡' : '';
-        const color = pct < 20 ? '#ef4444' : pct < 50 ? '#f59e0b' : '#10a37f';
-        document.getElementById('battery-indicator').innerHTML =
-          `<div class="battery-pill">🔋 <span style="color:${color};font-weight:600">${pct}%</span>${charging}</div>`;
-      } catch(e) {}
     }
 
     function escapeHTML(str) {
