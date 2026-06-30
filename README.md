@@ -60,7 +60,7 @@ prosumer) and `AGENT_ID` (its name on the market).
 
 ```bash
 cd src
-PROFILE_ID=84 AGENT_ID=S_01 uvicorn main:app --port 8002
+set PROFILE_ID=84 && set AGENT_ID=S_01 && uvicorn main:app --port 8002
 ```
 
 Then open http://localhost:8002 for the chat UI.

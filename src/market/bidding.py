@@ -14,7 +14,7 @@ import json
 
 import pandas as pd
 
-import battery_utility
+import battery_utility as buc
 from battery_utility import Storage
 from forecasting import chronos_forecast
 from market.flow import MarketContext, run_blocking, run_pipeline
@@ -224,7 +224,7 @@ async def battery_utility(ctx: MarketContext):
         storages = [Storage(id=i, c_rate=0.2, volume=i) for i in range(1, int(full_battery) + 1)]
 
     result = await run_blocking(
-        battery_utility.storage_worth,
+        buc.storage_worth,
         baseline_storage=Storage(id=int(full_battery), c_rate=0.2, volume=full_battery),
         storages=storages,
         my_location=ctx.data.get("location", "aachen"),
@@ -235,7 +235,7 @@ async def battery_utility(ctx: MarketContext):
         **common,
     )
 
-    curve = battery_utility.bidding_curve(result["results_df"], is_buyer=is_buyer, max_tradeable=max_tradeable)
+    curve = buc.bidding_curve(result["results_df"], is_buyer=is_buyer, max_tradeable=max_tradeable)
     ctx.data["bidding_curve"] = curve
     ctx.data["buc_charge_series"] = result.get("storages_to_calc_charge_ts", {})
     ctx.log(
