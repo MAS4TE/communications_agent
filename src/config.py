@@ -36,6 +36,18 @@ PROFILE_ID = int(os.environ.get("PROFILE_ID", 84))
 AGENT_ID = os.environ.get("AGENT_ID", "S_01")
 
 # --------------------------------------------------------------------------
+# Locations
+# --------------------------------------------------------------------------
+SELLER_LOCATIONS = ["aachen", "juelich", "heerlen", "liege"]
+LOCATION_COUNTRY = {
+    "aachen": "germany",
+    "juelich": "germany",
+    "heerlen": "netherlands",
+    "liege": "belgium",
+}
+DEFAULT_COUNTRY="germany"
+
+# --------------------------------------------------------------------------
 # Chronos forecasting service
 # --------------------------------------------------------------------------
 CHRONOS_URL = "http://127.0.0.1:8000"

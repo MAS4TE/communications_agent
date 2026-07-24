@@ -2,11 +2,24 @@ import subprocess
 import sys
 import os
 
+# agents = [
+#     {"PROFILE_ID": "3",   "AGENT_ID": "B_01"},
+#     {"PROFILE_ID": "152", "AGENT_ID": "B_02"},
+#     {"PROFILE_ID": "84",  "AGENT_ID": "S_01"},
+#     {"PROFILE_ID": "92",  "AGENT_ID": "S_02"},
+# ]
+
 agents = [
     {"PROFILE_ID": "3",   "AGENT_ID": "B_01"},
     {"PROFILE_ID": "152", "AGENT_ID": "B_02"},
+    {"PROFILE_ID": "9",   "AGENT_ID": "B_03"},
+    {"PROFILE_ID": "33",  "AGENT_ID": "B_04"},
+    {"PROFILE_ID": "96",  "AGENT_ID": "B_05"},
+    {"PROFILE_ID": "168", "AGENT_ID": "B_06"},
+    {"PROFILE_ID": "18",  "AGENT_ID": "B_07"},
     {"PROFILE_ID": "84",  "AGENT_ID": "S_01"},
     {"PROFILE_ID": "92",  "AGENT_ID": "S_02"},
+    {"PROFILE_ID": "87",  "AGENT_ID": "S_03"},
 ]
 
 port = 8001

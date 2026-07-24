@@ -19,7 +19,7 @@ from battery_utility import Storage
 from forecasting import chronos_forecast
 from market.flow import MarketContext, run_blocking, run_pipeline
 from prosumer import load_profile_metadata
-from config import DATA_DIR
+from config import DATA_DIR, LOCATION_COUNTRY, DEFAULT_COUNTRY
 
 PRICES_CSV = DATA_DIR / "profile_data" / "prices.csv"
 
@@ -58,7 +58,10 @@ def _cached_forecast(cache_path, csv_path, value_col, start, end) -> pd.Series:
         if getattr(series.index, "tz", None) is not None:
             series.index = series.index.tz_localize(None)
         return series[(series.index >= start) & (series.index < end)]
-    return chronos_forecast(str(csv_path), start, end, value_col=value_col)
+
+    series = chronos_forecast(str(csv_path), start, end, value_col=value_col)
+    series.to_frame(name=value_col).to_csv(cache_path)
+    return series
 
 
 # --------------------------------------------------------------------------
@@ -68,7 +71,7 @@ async def retrieve_profile(ctx: MarketContext):
     metadata = await run_blocking(load_profile_metadata, ctx.agent.profile_id)
     storage_size = metadata.get("battery_size_kwh", 0.0)
     ctx.data["storage_size_kwh"] = storage_size
-    ctx.data["location"] = metadata.get("location", "unknown")
+    ctx.data["location"] = metadata.get("location", "unknown").lower()
     role = "seller" if storage_size > 0 else "buyer"
     ctx.log(
         "retrieve_profile",
@@ -131,7 +134,11 @@ async def forecast_solar(ctx: MarketContext):
 
 async def forecast_prices(ctx: MarketContext):
     window = ctx.data["window"]
-    table = pd.read_csv(PRICES_CSV)
+    location = ctx.data.get("location", "unknown")
+    country = LOCATION_COUNTRY.get(location, DEFAULT_COUNTRY)
+
+    prices_csv = DATA_DIR / "profile_data" / f"prices_{country}.csv"
+    table = pd.read_csv(prices_csv)
     table = table[[c for c in table.columns if not c.startswith("Unnamed")]]
     price_columns = [c for c in table.columns if c != "datetime"]
 
@@ -139,13 +146,12 @@ async def forecast_prices(ctx: MarketContext):
     for col in price_columns:
         prices[col] = await run_blocking(
             _cached_forecast,
-            DATA_DIR / f"prices_{col}_forecasted.csv",
-            PRICES_CSV, col, window["start"], window["end"],
+            DATA_DIR / f"prices_{country}_{col}_forecasted.csv",
+            prices_csv, col, window["start"], window["end"],
         )
     ctx.data["prices_fc"] = prices
-    ctx.log("forecast_prices", f"Forecast {len(price_columns)} energy price streams.",
-            {"columns": price_columns})
-
+    ctx.log("forecast_prices", f"Forecast {len(price_columns)} energy price streams for {country}.",
+            {"columns": price_columns, "country": country})
 
 async def reason_volume_range(ctx: MarketContext):
     """Buyers only: ask the LLM for the upper bound of the volume search range.
@@ -200,6 +206,10 @@ async def battery_utility(ctx: MarketContext):
     full_battery = ctx.data["storage_size_kwh"]
     is_buyer = full_battery <= 0
     goal = "max_green_energy" if preferences.get("trading_preference") == "Green" else "max_cashflow"
+
+
+    print(f"DEBUG battery_utility start: is_buyer={is_buyer}, max_volume_in_ctx={ctx.data.get('max_volume')}, full_battery={full_battery}")
+
 
     # All series share the demand timeline.
     demand = _to_series(ctx.data["demand_fc"])

@@ -24,17 +24,19 @@ from battery_utility_calculator import (
     calculate_multiple_storage_worth,
     calculate_multiple_storage_worth_by_location,
 )
+from config import SELLER_LOCATIONS, LOCATION_COUNTRY
+
 
 __all__ = ["Storage", "storage_worth", "bidding_curve"]
 
 # Where seller batteries can physically live, and which country each is in.
-SELLER_LOCATIONS = ["aachen", "juelich", "heerlen", "liege"]
-LOCATION_COUNTRY = {
-    "aachen": "germany",
-    "juelich": "germany",
-    "heerlen": "netherlands",
-    "liege": "belgium",
-}
+# SELLER_LOCATIONS = ["aachen", "juelich", "heerlen", "liege"]
+# LOCATION_COUNTRY = {
+#     "aachen": "germany",
+#     "juelich": "germany",
+#     "heerlen": "netherlands",
+#     "liege": "belgium",
+# }
 
 
 def _locations_in_scope(trading_scope: str, my_location: str) -> list[str]:

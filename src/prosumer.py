@@ -21,7 +21,9 @@ import pandas as pd
 
 from config import DATA_DIR
 
-PROFILES_CSV = DATA_DIR / "profile_data" / "profiles_usecases.csv"
+PROFILES_CSV = DATA_DIR / "profile_data" / "profiles_usecases10.csv"
+# PROFILES_CSV = DATA_DIR / "profile_data" / "profiles_usecases.csv"
+
 
 # Sensible defaults until the user changes them in the UI panel.
 DEFAULT_PREFERENCES = {
@@ -63,5 +65,6 @@ def load_profile_metadata(profile_id: int) -> dict:
     """
     table = _profiles_table()
     if not table.index.is_unique:
-        raise ValueError("profile_id is not unique in profiles_usecases.csv")
+        # raise ValueError("profile_id is not unique in profiles_usecases.csv")
+        raise ValueError("profile_id is not unique in profiles_usecases10.csv")
     return table.loc[profile_id].to_dict()

@@ -40,15 +40,28 @@ subprocess.Popen(
 print("Battery started!")
 
 # Wait for everything to boot before starting agents
-print("\nWaiting 3s for services to boot...")
-time.sleep(3)
+print("\nWaiting 10s for services to boot...")
+time.sleep(10)
 
 # Agents
+# agents = [
+#     {"PROFILE_ID": "3",   "AGENT_ID": "B_01"},
+#     {"PROFILE_ID": "152", "AGENT_ID": "B_02"},
+#     {"PROFILE_ID": "84",  "AGENT_ID": "S_01"},
+#     {"PROFILE_ID": "92",  "AGENT_ID": "S_02"},
+# ]
+
 agents = [
     {"PROFILE_ID": "3",   "AGENT_ID": "B_01"},
-    {"PROFILE_ID": "152", "AGENT_ID": "B_02"},
+    # {"PROFILE_ID": "152", "AGENT_ID": "B_02"},
+    # {"PROFILE_ID": "9",   "AGENT_ID": "B_03"},
+    # {"PROFILE_ID": "33",  "AGENT_ID": "B_04"},
+    # {"PROFILE_ID": "96",  "AGENT_ID": "B_05"},
+    # {"PROFILE_ID": "168", "AGENT_ID": "B_06"},
+    # {"PROFILE_ID": "18",  "AGENT_ID": "B_07"},
     {"PROFILE_ID": "84",  "AGENT_ID": "S_01"},
-    {"PROFILE_ID": "92",  "AGENT_ID": "S_02"},
+#     {"PROFILE_ID": "92",  "AGENT_ID": "S_02"},
+#     {"PROFILE_ID": "87",  "AGENT_ID": "S_03"},
 ]
 
 agents_src    = os.path.join(BASE, "src")
@@ -62,7 +75,7 @@ for agent in agents:
     env["AGENT_ID"]   = agent["AGENT_ID"]
 
     subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "main:app", "--port", str(port)],
+        ["cmd", "/k", sys.executable, "-m", "uvicorn", "main:app", "--port", str(port)],
         cwd=agents_src,
         env=env,
         creationflags=subprocess.CREATE_NEW_CONSOLE
