@@ -24,7 +24,7 @@ def get_profile_metadata(data: dict = None, profile_id: int = None):
     if pid is None:
         raise ValueError("No profile_id available")
 
-    profiles_df = pd.read_csv("data/profile_data/profiles_usecases.csv", index_col=0)
+    profiles_df = pd.read_csv("data/profile_data/profiles_usecases10.csv", index_col=0)
     profiles_df.columns = profiles_df.columns.str.strip()  # remove tab characters
 
     profiles_df = profiles_df.set_index("profile_id")

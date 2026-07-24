@@ -18,7 +18,7 @@ class ProsumerService:
         with open(path, "r") as f:
             profile = json.load(f)
 
-        df = pd.read_csv("data/profile_data/profiles_usecases.csv", index_col=0)
+        df = pd.read_csv("data/profile_data/profiles_usecases10.csv", index_col=0)
         df = df.set_index("profile_id")
         if GLOBAL_PROFILE_ID in df.index:
             profile["location"] = df.loc[GLOBAL_PROFILE_ID, "location"]

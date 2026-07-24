@@ -143,7 +143,7 @@ async def step_retrieve_preferences(dto):
     service = ProsumerService()
     preferences = service.get_preferences()
 
-    # preferences["trading_preference"]="Green"
+    preferences["trading_preference"]="Green"
 
     dto["preferences"] = preferences
     if dto.get("storage_size_kwh", 0) > 0:
