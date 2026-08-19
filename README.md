@@ -186,6 +186,44 @@ exist, which port each one gets and where the external services live. Each agent
 gets its web UI on its own port (`http://localhost:8002` and up) and its output
 in `logs/<AGENT_ID>.log`. Ctrl-C stops the whole tree in order.
 
+### Watching one agent at a time
+
+```bash
+python launch.py --terminals --agents B_01,S_01
+```
+
+Each agent (and each service) then gets its own console window, titled with the
+agent id, and still writes `logs/<AGENT_ID>.log` — the window is the live view,
+the file is the record. On Windows that is `cmd /k`, so the window stays open
+after a crash with the traceback still on screen. On Linux the launcher looks for
+gnome-terminal, konsole, xfce4-terminal, xterm or x-terminal-emulator and falls
+back to head-less if it finds none.
+
+### Reading the logs
+
+Every line says when, which agent, which part of the system, and what happened:
+
+```
+14:22:07 S_01  market   INFO    receive topic=mas4te/market/status_agentS_01 status=market_open products=1 -> queue bidding
+14:22:07 S_01  agent    INFO    worker picked up run_bidding (0 still queued)
+14:22:07 S_01  pipeline INFO    bidding start steps=10
+14:22:11 S_01  pipeline INFO    bidding step 8/10 battery_utility done in 4.31s
+14:22:11 S_01  market   INFO    publish topic=mas4te/bids/agentS_01 orders=37 volume=37.00kWh queued=True
+```
+
+The logger name is the part of the system, so you can grep for one concern:
+`market` (who sent what, where), `pipeline` (which step, how long), `bidding`,
+`clearing`, `agent` (the worker and its queue), `llm`, `buc`.
+
+Knobs, all environment variables:
+
+| variable | effect |
+|---|---|
+| `LOG_LEVEL=DEBUG` | more detail, including messages the agent ignored |
+| `LOG_ACCESS=1` | uvicorn's per-request log (noisy: the viewer polls once a second) |
+| `LOG_FILE=path` | also append to that file; the launcher sets it in `--terminals` mode |
+| `BUC_DEBUG=2` | the optimiser's own output, off at every log level because it is dozens of lines per solve |
+
 **Note:** one agent is one process, and the bidding step runs an optimiser — on a
 small machine start two or three (`--agents ...`), not the full roster.
 
@@ -233,6 +271,13 @@ cd src && python -m market.clear_retained
 ## External dependencies
 
 This agent does not run in isolation — it expects these to be reachable:
+
+Each of these lives in its own checkout with its own virtualenv, and the
+launcher starts it with **that** interpreter. Their dependencies are not ours and
+must not be installed here — `fmpy`, for instance, belongs to the battery
+simulation. If a service's venv is missing, `launch.py` says so and skips the
+service; it will not fall back to the agent's interpreter, because that only
+turns "no venv" into a `ModuleNotFoundError` inside someone else's code.
 
 - **Chronos forecaster** at `http://127.0.0.1:8000` (see `config.CHRONOS_URL`).
   Not needed for a window that already has a pre-computed forecast CSV in `data/`.

@@ -8,11 +8,15 @@ those retained messages:
     python -m market.clear_retained            # the agents from agents.yml
     python -m market.clear_retained B_01 S_01  # or an explicit list
 """
+import logging
 import sys
 
 from paho.mqtt.client import CallbackAPIVersion, Client
 
+import logging_setup
 from config import MQTT_LOCAL_BROKER, MQTT_LOCAL_PORT
+
+log = logging.getLogger("market")
 
 
 def clear(agent_ids: list[str]) -> None:
@@ -26,13 +30,14 @@ def clear(agent_ids: list[str]) -> None:
         topic = f"mas4te/market/status_agent{agent_id}"
         info = client.publish(topic, payload=None, qos=1, retain=True)
         info.wait_for_publish()
-        print(f"Cleared retained message on {topic}")
+        log.info("cleared retained message topic=%s", topic)
 
     client.loop_stop()
     client.disconnect()
 
 
 def main() -> None:
+    logging_setup.setup("clear")
     agent_ids = sys.argv[1:]
     if not agent_ids:
         from agents_config import load_agents

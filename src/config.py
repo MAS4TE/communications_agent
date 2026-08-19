@@ -11,10 +11,13 @@ environment variables, set by start_agents.py / launch.py:
     PROFILE_ID   e.g. "84"     -> which prosumer profile to load
     AGENT_ID     e.g. "S_01"   -> this agent's name on the MQTT market
 """
+import logging
 import os
 from pathlib import Path
 
 import yaml
+
+log = logging.getLogger("config")
 
 
 def _env_flag(name: str, default: bool) -> bool:
@@ -144,7 +147,7 @@ def load_api_keys() -> None:
         with open(MISTRAL_KEY_FILE) as f:
             key = (yaml.safe_load(f) or {}).get("mistral_api_key", "")
     except (yaml.YAMLError, OSError, AttributeError) as error:
-        print(f"CONFIG: ignoring unreadable {MISTRAL_KEY_FILE.name}: {error}")
+        log.warning("ignoring unreadable %s: %s", MISTRAL_KEY_FILE.name, error)
         return
     if key:
         os.environ["MISTRAL_API_KEY"] = key

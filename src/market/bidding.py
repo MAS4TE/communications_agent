@@ -14,6 +14,7 @@ bottom is the pipeline. There is no async, no queue and no framework here — se
 pipeline.py for the six-line runner.
 """
 import json
+import logging
 
 import pandas as pd
 from battery_utility_calculator import (
@@ -27,6 +28,8 @@ from config import DATA_DIR, DEFAULT_COUNTRY, DRY_RUN, LOCATION_COUNTRY, SELLER_
 from forecasting import chronos_forecast
 from market.pipeline import MarketContext, run_pipeline
 from prosumer import load_profile_metadata
+
+log = logging.getLogger("bidding")
 
 PRICES_CSV = DATA_DIR / "profile_data" / "prices.csv"
 
@@ -228,7 +231,7 @@ Respond with JSON only — no markdown:
             max_volume = min(max_volume, int(net_demand.max()) + 3)
         reasoning = decision.get("reasoning", "")
     except Exception as error:
-        print(f"BIDDING: volume reasoning failed ({error}), using fallback 10")
+        log.warning("volume reasoning failed (%s) — falling back to max_volume=10", error)
 
     ctx.data["max_volume"] = max_volume
     ctx.log("reason_volume_range", "LLM decided the buyer's volume search range.",
@@ -373,7 +376,7 @@ BIDDING_STEPS = [
 def run_bidding(agent, market_data: dict) -> MarketContext:
     """Run the full bidding pipeline for one market-open event."""
     ctx = MarketContext(agent=agent, market_data=market_data)
-    run_pipeline(ctx, BIDDING_STEPS, agent.pipeline_status)
+    run_pipeline(ctx, BIDDING_STEPS, agent.pipeline_status, name="bidding")
     # Remember this run so clearing can reuse the forecasts and schedules, and
     # so the chat assistant can explain the bid.
     agent.last_bidding_data = ctx.data

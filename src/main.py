@@ -15,20 +15,27 @@ read that one agent off app.state. Nothing here is async: FastAPI runs the plain
 `def` routes on its own threadpool, and the market side lives on the agent's
 worker thread.
 """
+import logging
+
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 import config
+import logging_setup
 from agent import Agent
 from api import router
 from market.buc_debug import enable_if_requested
+
+# First, so that everything below is logged the same way and carries the agent id.
+logging_setup.setup(config.AGENT_ID)
+log = logging.getLogger("agent")
 
 config.load_api_keys()
 enable_if_requested()               # BUC_DEBUG=1 traces every optimiser solve
 
 agent = Agent(profile_id=config.PROFILE_ID, agent_id=config.AGENT_ID)
 agent.start()
-print(f"AGENT {agent.agent_id} (profile {agent.profile_id}) ready")
+log.info("ready profile=%s port=see launcher", agent.profile_id)
 
 app = FastAPI(title="MAS4TE Communication Agent", version="0.1.0")
 app.state.agent = agent

@@ -12,6 +12,8 @@ do once it knows what was accepted?"
 The forecasts computed during bidding are reused here — run_clearing starts from
 a copy of the last bidding run's data.
 """
+import logging
+
 import pandas as pd
 import requests
 from battery_utility_calculator import Storage, calculate_multiple_storage_worth
@@ -20,6 +22,8 @@ from requests.auth import HTTPBasicAuth
 from config import DRY_RUN, POWER_REQUEST_URL, SOLVER, rest_api_credentials
 from market.bidding import C_RATE, forecast_inputs
 from market.pipeline import MarketContext, run_pipeline
+
+log = logging.getLogger("clearing")
 
 
 # --------------------------------------------------------------------------
@@ -135,7 +139,7 @@ def _publish_buyer_schedule(ctx: MarketContext):
         params={"is_real_world_test": False},   # False = simulation, no physical battery
         timeout=60,
     )
-    print(f"CLEARING: buyer schedule POST -> {response.status_code}")
+    log.info("POST %s -> %s", POWER_REQUEST_URL, response.status_code)
 
     ctx.log("publish_battery_schedule", "Sent the rented-storage schedule to the API (buyer).",
             {"role": "buyer", "accepted_volume_kwh": volume, "timesteps": len(payload["time_steps"])})
@@ -179,6 +183,6 @@ def run_clearing(agent, market_data: dict) -> MarketContext:
     """Run the full clearing pipeline for one market-result event."""
     # Start from the matching bidding run, so the forecasts are already there.
     ctx = MarketContext(agent=agent, market_data=market_data, data=dict(agent.last_bidding_data))
-    run_pipeline(ctx, CLEARING_STEPS, agent.pipeline_status)
+    run_pipeline(ctx, CLEARING_STEPS, agent.pipeline_status, name="clearing")
     agent.clearing_traces.append(ctx.trace)
     return ctx

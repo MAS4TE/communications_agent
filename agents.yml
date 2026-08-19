@@ -27,6 +27,12 @@ broker:
 # External services. Paths are relative to this file; a service whose directory
 # does not exist is skipped with a warning instead of taking the launch down.
 # Set enabled: false for anything you start yourself.
+#
+# `venv` is the virtualenv INSIDE that service's own checkout, and each service
+# is run with it — never with ours. They have dependencies we do not have (the
+# battery simulation needs fmpy, Chronos its forecasting stack), so a missing
+# venv is reported as such instead of being papered over with our interpreter.
+# Use `venv: null` only if a service really is meant to share our environment.
 services:
 
   chronos:

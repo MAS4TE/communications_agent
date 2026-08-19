@@ -18,9 +18,12 @@ pipeline viewer polls while a run is in progress.
 Everything here runs on the agent's single worker thread (see agent.py), so
 steps never run concurrently and need no locking.
 """
+import logging
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+
+log = logging.getLogger("pipeline")
 
 
 @dataclass
@@ -91,19 +94,28 @@ class PipelineStatus:
         }
 
 
-def run_pipeline(ctx: MarketContext, steps: list, status: PipelineStatus) -> MarketContext:
+def run_pipeline(ctx: MarketContext, steps: list, status: PipelineStatus,
+                 name: str = "pipeline") -> MarketContext:
     """Run the steps in order. Raises whatever a step raises, after recording it."""
     status.start([step.__name__ for step in steps])
-    for step in steps:
-        print(f"PIPELINE: {step.__name__}", flush=True)
+    log.info("%s start steps=%d", name, len(steps))
+    started = time.time()
+
+    for number, step in enumerate(steps, start=1):
         status.begin(step.__name__)
+        step_started = time.time()
         try:
             step(ctx)
         except Exception as error:
             status.finish("failed", f"failed in {step.__name__}: {error}")
-            print(f"PIPELINE: failed in step '{step.__name__}': "
-                  f"{type(error).__name__}: {error}", flush=True)
+            log.error("%s step %d/%d %s FAILED after %.2fs: %s: %s", name, number,
+                      len(steps), step.__name__, time.time() - step_started,
+                      type(error).__name__, error)
             raise
         status.finish_step(step.__name__)
+        log.info("%s step %d/%d %s done in %.2fs", name, number, len(steps),
+                 step.__name__, time.time() - step_started)
+
     status.finish("done")
+    log.info("%s done in %.2fs", name, time.time() - started)
     return ctx

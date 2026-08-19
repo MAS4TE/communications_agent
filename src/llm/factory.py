@@ -11,6 +11,7 @@ Two rules keep a missing LLM from taking the whole agent down:
   - the LM Studio backend is imported lazily, because its SDK is an optional
     dependency that most deployments don't install.
 """
+import logging
 import os
 
 from config import LLM_BACKEND, LLM_CONFIGS
@@ -20,6 +21,8 @@ from llm.openai_compatible import OpenAICompatibleLLM
 
 # Which backend "auto" prefers when its credentials are available.
 AUTO_PREFERENCE = ["mistral", "openai"]
+
+log = logging.getLogger("llm")
 
 
 def resolve_backend(backend: str = LLM_BACKEND) -> str:
@@ -36,7 +39,8 @@ def build_llm(backend: str = LLM_BACKEND) -> ChatLLM:
     backend = resolve_backend(backend)
 
     if backend == "offline":
-        print("LLM: no API key found — using the offline backend (chat answers from raw data)")
+        log.warning("no API key found — using the offline backend "
+                    "(chat answers from raw data; trading is unaffected)")
         return OfflineLLM()
 
     config = LLM_CONFIGS[backend]
@@ -61,7 +65,7 @@ def build_llm(backend: str = LLM_BACKEND) -> ChatLLM:
             f"file next to config.py, or use LLM_BACKEND=auto to fall back to offline."
         )
 
-    print(f"LLM: using {backend} ({config['model_name']})")
+    log.info("using backend=%s model=%s", backend, config["model_name"])
     return OpenAICompatibleLLM(
         model_name=config["model_name"],
         base_url=config["base_url"],

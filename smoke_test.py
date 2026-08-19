@@ -40,10 +40,12 @@ def main() -> int:
     import pandas as pd
 
     import config
+    import logging_setup
     from agent import Agent
     from market.bidding import run_bidding
     from market.clearing import run_clearing
 
+    logging_setup.setup(args.agent)
     config.load_api_keys()
     print(f"data dir : {config.DATA_DIR}")
     print(f"solver   : {config.SOLVER}")

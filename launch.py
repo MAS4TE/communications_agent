@@ -3,7 +3,7 @@
     python launch.py --check      report what is ready and what is missing
     python launch.py              start everything in agents.yml and supervise it
     python launch.py --agents B_01,S_01 --no-services
-    python launch.py --only-agents
+    python launch.py --terminals          one console window per agent
 
 Which agents run, and where the services they depend on live, is configured in
 agents.yml — not in this file.
@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import argparse
 import os
+import shlex
+import shutil
 import signal
 import socket
 import subprocess
@@ -62,10 +64,31 @@ class Child:
         return self.process.poll() is None
 
 
-def _spawn(name: str, command: list[str], cwd: Path, env: dict | None = None) -> Child:
-    """Start one child process, its output going to logs/<name>.log."""
+def _spawn(name: str, command: list[str], cwd: Path, env: dict | None = None,
+           terminal: bool = False) -> Child:
+    """Start one child process.
+
+    Head-less (the default) its output is captured into logs/<name>.log. With
+    `terminal`, it gets its own console window instead and writes the same lines
+    to that log file itself, via LOG_FILE (see src/logging_setup.py).
+    """
     LOG_DIR.mkdir(exist_ok=True)
     log_path = LOG_DIR / f"{name}.log"
+
+    if terminal:
+        wrapped = terminal_command(name, command)
+        if wrapped is None:
+            print(f"      no terminal emulator found — running {name} head-less")
+        else:
+            env = {**(env or {}), "LOG_FILE": str(log_path)}
+            process = subprocess.Popen(
+                wrapped, cwd=str(cwd), env={**os.environ, **env},
+                **({"creationflags": subprocess.CREATE_NEW_CONSOLE} if IS_WINDOWS
+                   else {"start_new_session": True}),
+            )
+            return Child(name=name, process=process, log_path=log_path,
+                         log_file=open(os.devnull, "w"))
+
     log_file = open(log_path, "w", buffering=1, encoding="utf-8", errors="replace")
 
     # A separate process group so Ctrl-C in this terminal doesn't race us to the
@@ -84,6 +107,36 @@ def _spawn(name: str, command: list[str], cwd: Path, env: dict | None = None) ->
         **extra,
     )
     return Child(name=name, process=process, log_path=log_path, log_file=log_file)
+
+
+# Terminal emulators we know how to drive, in the order we prefer them. Each
+# entry builds the argv that opens a window titled `title` running `inner`
+# (a shell command line).
+_LINUX_TERMINALS = [
+    ("gnome-terminal", lambda title, inner: ["gnome-terminal", f"--title={title}", "--", "bash", "-c", inner]),
+    ("konsole",        lambda title, inner: ["konsole", "-p", f"tabtitle={title}", "-e", "bash", "-c", inner]),
+    ("xfce4-terminal", lambda title, inner: ["xfce4-terminal", f"--title={title}", "-x", "bash", "-c", inner]),
+    ("xterm",          lambda title, inner: ["xterm", "-T", title, "-e", "bash", "-c", inner]),
+    ("x-terminal-emulator", lambda title, inner: ["x-terminal-emulator", "-T", title, "-e", "bash", "-c", inner]),
+]
+
+
+def terminal_command(title: str, command: list[str]) -> list[str] | None:
+    """Wrap a command so it runs in its own visible terminal window.
+
+    Returns None when there is no terminal to use, so the caller can fall back
+    to running head-less instead of failing.
+    """
+    if IS_WINDOWS:
+        # `cmd /k` keeps the window open after the process exits, which is the
+        # whole point when you are looking for the traceback that killed it.
+        return ["cmd", "/k", "title", title, "&", *command]
+
+    inner = shlex.join(command) + "; echo; echo '--- exited, press enter to close ---'; read"
+    for name, build in _LINUX_TERMINALS:
+        if shutil.which(name):
+            return build(title, inner)
+    return None
 
 
 def _terminate(child: Child) -> None:
@@ -175,17 +228,28 @@ def _installed_from(dist) -> str:
     return f"installed from {url}"
 
 
-def service_python(service: ServiceSpec) -> str:
-    """The interpreter a service should run under: its own venv, or ours."""
-    if service.venv:
-        candidates = [
-            service.path / service.venv / "bin" / "python",
-            service.path / service.venv / "Scripts" / "python.exe",
-        ]
-        for candidate in candidates:
+def service_python(service: ServiceSpec) -> Path | None:
+    """The interpreter a service runs under — its own venv, never ours.
+
+    Each service has dependencies we do not have and should not have: the
+    battery simulation needs fmpy, Chronos needs the forecasting stack. Falling
+    back to the agent's interpreter when a service's venv is missing does not
+    make the service run, it just turns a clear "no venv" into a confusing
+    ModuleNotFoundError deep inside someone else's code.
+
+    Returns None when the service declares a venv that is not there. A service
+    that declares none at all (venv: null) shares our interpreter on purpose.
+    """
+    if not service.venv:
+        return Path(sys.executable)
+
+    # Accept the usual alternative name, so a checkout using .venv still works.
+    for name in dict.fromkeys([service.venv, "venv", ".venv"]):
+        for candidate in (service.path / name / "bin" / "python",
+                          service.path / name / "Scripts" / "python.exe"):
             if candidate.exists():
-                return str(candidate)
-    return sys.executable
+                return candidate
+    return None
 
 
 # --------------------------------------------------------------------------
@@ -290,7 +354,16 @@ def preflight(agents: list[AgentSpec], services: list[ServiceSpec]) -> bool:
         if not service.enabled:
             print(f"  {service.name:9} disabled in agents.yml")
         elif service.available:
-            print(f"  {service.name:9} found at {service.path}")
+            interpreter = service_python(service)
+            if interpreter is None:
+                ok = False
+                print(f"  {service.name:9} found at {service.path}, but its virtualenv "
+                      f"({service.venv}) is missing")
+                print(f"  {'':9} it needs its own dependencies — ours cannot run it")
+            elif interpreter == Path(sys.executable):
+                print(f"  {service.name:9} found at {service.path}, sharing our interpreter")
+            else:
+                print(f"  {service.name:9} found at {service.path}, using {interpreter}")
         else:
             print(f"  {service.name:9} MISSING at {service.path} — will be skipped")
 
@@ -308,7 +381,7 @@ def preflight(agents: list[AgentSpec], services: list[ServiceSpec]) -> bool:
 # --------------------------------------------------------------------------
 # Starting things
 # --------------------------------------------------------------------------
-def start_service(service: ServiceSpec) -> Child | None:
+def start_service(service: ServiceSpec, terminal: bool = False) -> Child | None:
     if not service.enabled:
         print(f"SKIP  {service.name}: disabled in agents.yml")
         return None
@@ -316,8 +389,18 @@ def start_service(service: ServiceSpec) -> Child | None:
         print(f"SKIP  {service.name}: {service.path} does not exist")
         return None
 
-    command = [service_python(service), *service.command]
-    child = _spawn(service.name, command, cwd=service.path)
+    interpreter = service_python(service)
+    if interpreter is None:
+        print(f"SKIP  {service.name}: no interpreter — expected a virtualenv at "
+              f"{service.path / service.venv}")
+        print(f"      {service.name} has its own dependencies (the battery simulation "
+              f"needs fmpy, Chronos its forecasting stack); ours will not do.")
+        print(f"      fix: create it in {service.path}, or set enabled: false in "
+              f"agents.yml and start {service.name} yourself.")
+        return None
+
+    command = [str(interpreter), *service.command]
+    child = _spawn(service.name, command, cwd=service.path, terminal=terminal)
     print(f"START {service.name} (pid {child.process.pid}) -> {child.log_path}")
 
     if service.health_url:
@@ -329,7 +412,7 @@ def start_service(service: ServiceSpec) -> Child | None:
     return child
 
 
-def start_agent(agent: AgentSpec) -> Child:
+def start_agent(agent: AgentSpec, terminal: bool = False) -> Child:
     command = [
         sys.executable, "-m", "uvicorn", "main:app",
         "--host", "127.0.0.1", "--port", str(agent.port),
@@ -343,9 +426,10 @@ def start_agent(agent: AgentSpec) -> Child:
         "MQTT_LOCAL_BROKER": broker_host,
         "MQTT_LOCAL_PORT": str(broker_port),
     }
-    child = _spawn(agent.agent_id, command, cwd=SRC, env=env)
+    child = _spawn(agent.agent_id, command, cwd=SRC, env=env, terminal=terminal)
     print(f"START {agent.agent_id:6} profile {agent.profile_id:<4} "
-          f"pid {child.process.pid} -> http://localhost:{agent.port}")
+          f"pid {child.process.pid} -> http://localhost:{agent.port}"
+          f"{'  (own window)' if terminal else ''}")
     return child
 
 
@@ -414,6 +498,9 @@ def main() -> int:
                         help="comma-separated agent ids to start (default: all of agents.yml)")
     parser.add_argument("--no-services", "--only-agents", dest="no_services",
                         action="store_true", help="do not start Chronos, battery or ASSUME")
+    parser.add_argument("--terminals", action="store_true",
+                        help="give each agent its own console window (it still "
+                             "writes logs/<AGENT_ID>.log)")
     parser.add_argument("--force", action="store_true",
                         help="start even if the preflight check fails")
     args = parser.parse_args()
@@ -447,12 +534,12 @@ def main() -> int:
     try:
         for service in services:
             if not service.start_after_agents:
-                child = start_service(service)
+                child = start_service(service, terminal=args.terminals)
                 if child:
                     children.append(child)
 
         for agent in agents:
-            children.append(start_agent(agent))
+            children.append(start_agent(agent, terminal=args.terminals))
 
         print("\nWaiting for the agents to come up...")
         wait_for_agents(agents, children)
@@ -461,7 +548,7 @@ def main() -> int:
         # subscribed by now and won't miss the first market_open.
         for service in services:
             if service.start_after_agents:
-                child = start_service(service)
+                child = start_service(service, terminal=args.terminals)
                 if child:
                     children.append(child)
 

@@ -19,9 +19,9 @@ message on a queue. One worker thread takes jobs off that queue and runs the
 pipeline. Because there is exactly one worker, two pipeline runs can never
 overlap and nothing needs locking.
 """
+import logging
 import queue
 import threading
-import traceback
 
 from llm import build_chat_tools, build_llm, build_system_message
 from market.bidding import run_bidding
@@ -29,6 +29,8 @@ from market.clearing import run_clearing
 from market.mqtt import BatteryClient, MarketClient
 from market.pipeline import PipelineStatus
 from prosumer import DEFAULT_PREFERENCES, load_profile
+
+log = logging.getLogger("agent")
 
 
 class Agent:
@@ -65,6 +67,7 @@ class Agent:
         """Start the worker and connect both MQTT clients (call once)."""
         threading.Thread(target=self._work, name=f"{self.agent_id}-pipeline",
                          daemon=True).start()
+        log.info("worker started profile=%s", self.profile_id)
         self.market_client.start()
         self.battery_client.start()
 
@@ -72,20 +75,24 @@ class Agent:
         """Run queued pipelines, one at a time, forever."""
         while True:
             pipeline, market_data = self.jobs.get()
+            log.info("worker picked up %s (%d still queued)",
+                     pipeline.__name__, self.jobs.qsize())
             try:
                 pipeline(self, market_data)
             except Exception:
                 # One bad market message must not kill the worker: log it and
                 # stay ready for the next one.
-                print(f"PIPELINE: {pipeline.__name__} failed for {self.agent_id}")
-                traceback.print_exc()
+                log.exception("%s failed — worker stays up for the next message",
+                              pipeline.__name__)
 
     # -- market events (called from the MQTT thread) -----------------------
     def on_market_open(self, market_data: dict):
         self.jobs.put((run_bidding, market_data))
+        log.debug("queued bidding (%d waiting)", self.jobs.qsize())
 
     def on_market_result(self, market_data: dict):
         self.jobs.put((run_clearing, market_data))
+        log.debug("queued clearing (%d waiting)", self.jobs.qsize())
 
     # -- preferences -------------------------------------------------------
     def update_preferences(self, **changes):

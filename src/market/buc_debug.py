@@ -24,9 +24,11 @@ read the real termination condition and put it in the error message.
                                            equations search, which carries its
                                            own 1000 s limit)
 
-Level 2 passes ``tee=True`` into the solve. That is the only way to tell a solver
-that is grinding (simplex iterations scrolling past) from one that never starts —
-the two look identical from outside, and ``optimize()`` hard-codes ``tee=False``.
+Level 2 passes ``tee=True`` into the solve and lifts the log level on pyomo's own
+loggers, which logging_setup.py keeps quiet by default. That is the only way to
+tell a solver that is grinding (simplex iterations scrolling past) from one that
+never starts — the two look identical from outside, and ``optimize()`` hard-codes
+``tee=False``.
 
 Level 1 also screens the input series once per solve for NaN, inf and duplicate
 index entries. A NaN price does not raise: HiGHS returns ``objective = nan``,
@@ -40,6 +42,7 @@ shows up for the first time on the first real storage.
 It is off unless BUC_DEBUG is set, and it never changes what the pipeline
 computes — only what it tells you about it.
 """
+import logging
 import os
 import time
 
@@ -164,6 +167,11 @@ def enable() -> None:
     level = _level() or 1
     tee = level >= 2
     options = _solver_options()
+
+    if tee:
+        # logging_setup.py silences these; at level 2 the solver output is the
+        # whole point.
+        logging.getLogger("pyomo").setLevel(logging.INFO)
 
     def traced(self, solver: str = "gurobi"):
         counter["n"] += 1
