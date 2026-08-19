@@ -34,10 +34,32 @@ DEFAULT_PREFERENCES = {
 }
 
 
+class MissingProsumerData(FileNotFoundError):
+    """Raised when data/ (git-ignored) is not in place."""
+
+
+def _require(path) -> None:
+    if not path.exists():
+        raise MissingProsumerData(
+            f"{path} is missing. The data/ directory is git-ignored — copy the "
+            f"prosumer profiles, price data and forecasts into {DATA_DIR} before "
+            f"starting an agent (see the README)."
+        )
+
+
 def _profiles_table() -> pd.DataFrame:
-    """The profiles_usecases.csv table, indexed by profile_id."""
-    df = pd.read_csv(PROFILES_CSV, index_col=0)
+    """The profiles_usecases table, indexed by profile_id.
+
+    The CSV is written by hand and its first column is sometimes an unnamed
+    export index and sometimes profile_id itself, so read it plainly and only
+    then decide what the index is.
+    """
+    _require(PROFILES_CSV)
+    df = pd.read_csv(PROFILES_CSV)
     df.columns = df.columns.str.strip()        # some columns have stray tabs
+    df = df[[c for c in df.columns if not c.startswith("Unnamed")]]
+    if "profile_id" not in df.columns:
+        raise ValueError(f"{PROFILES_CSV} has no profile_id column (found: {list(df.columns)})")
     return df.set_index("profile_id")
 
 
@@ -48,6 +70,7 @@ def load_profile(profile_id: int) -> dict:
     solar_panels, home_battery, battery_capacity_kwh, ...) plus their location.
     """
     path = DATA_DIR / "prosumers" / f"prosumer_{profile_id}.json"
+    _require(path)
     with open(path) as f:
         profile = json.load(f)
 
@@ -65,6 +88,11 @@ def load_profile_metadata(profile_id: int) -> dict:
     """
     table = _profiles_table()
     if not table.index.is_unique:
-        # raise ValueError("profile_id is not unique in profiles_usecases.csv")
-        raise ValueError("profile_id is not unique in profiles_usecases10.csv")
+        duplicates = sorted(table.index[table.index.duplicated()].unique().tolist())
+        raise ValueError(f"profile_id is not unique in {PROFILES_CSV.name}: {duplicates}")
+    if profile_id not in table.index:
+        raise KeyError(
+            f"profile_id {profile_id} is not in {PROFILES_CSV.name} "
+            f"(known: {sorted(table.index.tolist())})"
+        )
     return table.loc[profile_id].to_dict()

@@ -11,6 +11,9 @@ from openai import OpenAI
 
 from llm.base import ChatLLM, Tool, recent_messages
 
+# How many assistant -> tool -> assistant round trips one reply may take.
+MAX_TOOL_ROUNDS = 8
+
 
 class OpenAICompatibleLLM(ChatLLM):
     def __init__(self, model_name: str, base_url: str | None, api_key: str | None,
@@ -25,8 +28,10 @@ class OpenAICompatibleLLM(ChatLLM):
         fn_by_name = {t.name: t.fn for t in tools}
         conversation = recent_messages(messages)
 
-        # Tool-calling loop: keep going until the model answers without a tool call.
-        while True:
+        # Tool-calling loop: keep going until the model answers without a tool
+        # call. Bounded, so a model that keeps asking for tools cannot pin the
+        # request (and the agent's worker thread) forever.
+        for _ in range(MAX_TOOL_ROUNDS):
             response = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=conversation,
@@ -39,6 +44,7 @@ class OpenAICompatibleLLM(ChatLLM):
 
             if not message.tool_calls:
                 return message.content or ""
+
 
             # Record the assistant's request to call tools.
             conversation.append({
@@ -69,3 +75,6 @@ class OpenAICompatibleLLM(ChatLLM):
                     "tool_call_id": call.id,
                     "content": str(result),
                 })
+
+        return ("I got stuck looking that up — the assistant kept requesting more data. "
+                "Please ask again, more specifically.")

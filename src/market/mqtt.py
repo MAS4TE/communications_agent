@@ -9,11 +9,13 @@ Two thin wrappers around paho-mqtt:
   - BatteryClient talks to the physical battery (or its simulation). It sends
     power requests and logs whatever the battery replies.
 
-The MQTT callbacks run on paho's own thread, so they hand work back to the
-asyncio loop with ``run_coroutine_threadsafe``. The agent's lock then makes sure
-two pipeline runs never overlap.
+The callbacks run on paho's own thread and must return immediately, so they only
+hand the message to the agent, which queues it for its worker thread (agent.py).
+
+Both clients connect asynchronously and keep retrying: an agent must be able to
+start before the broker (or the whole ASSUME stack) is up, and rejoin by itself
+when the broker restarts.
 """
-import asyncio
 import json
 
 from paho.mqtt.client import Client, CallbackAPIVersion
@@ -39,16 +41,31 @@ class MarketClient:
 
         self.client = Client(CallbackAPIVersion.VERSION2, client_id=f"agent{agent.agent_id}")
         self.client.on_connect = self._on_connect
+        self.client.on_disconnect = self._on_disconnect
         self.client.on_message = self._on_message
 
     def start(self):
-        self.client.connect(MQTT_LOCAL_BROKER, MQTT_LOCAL_PORT, 60)
+        # connect_async + loop_start never raises when the broker is down; paho
+        # retries in the background and _on_connect re-subscribes each time.
+        self.client.reconnect_delay_set(min_delay=1, max_delay=30)
+        self.client.connect_async(MQTT_LOCAL_BROKER, MQTT_LOCAL_PORT, 60)
         self.client.loop_start()
-        print(f"MQTT: market client for {self.agent.agent_id} connected")
+        print(f"MQTT: market client for {self.agent.agent_id} connecting to "
+              f"{MQTT_LOCAL_BROKER}:{MQTT_LOCAL_PORT}")
 
     def _on_connect(self, client, userdata, flags, reason_code, properties):
+        if reason_code != 0:
+            print(f"MQTT: market client for {self.agent.agent_id} refused: {reason_code}")
+            return
         client.subscribe(self.topic_status)
         client.subscribe(self.topic_results)
+        print(f"MQTT: market client for {self.agent.agent_id} connected, "
+              f"subscribed to {self.topic_status} and {self.topic_results}")
+
+    def _on_disconnect(self, client, userdata, flags, reason_code, properties):
+        if reason_code != 0:
+            print(f"MQTT: market client for {self.agent.agent_id} lost the broker "
+                  f"({reason_code}) — retrying")
 
     def _on_message(self, client, userdata, message):
         try:
@@ -57,16 +74,17 @@ class MarketClient:
             print("MQTT: ignoring non-JSON message")
             return
 
+        # Queue the work and return — see the comment at the top of agent.py.
         if message.topic == self.topic_status and payload.get("status") == "market_open":
-            print("MQTT: market opened -> run bidding")
-            coroutine = self.agent.handle_market_open(payload)
+            print("MQTT: market opened -> queue bidding")
+            self.agent.on_market_open(payload)
         elif message.topic == self.topic_results and payload.get("msg") == "market result":
-            print("MQTT: market cleared -> run clearing")
-            coroutine = self.agent.handle_market_clearing(payload)
-        else:
-            return
+            print("MQTT: market cleared -> queue clearing")
+            self.agent.on_market_result(payload)
 
-        asyncio.run_coroutine_threadsafe(coroutine, self.agent.loop)
+    def stop(self):
+        self.client.loop_stop()
+        self.client.disconnect()
 
     def send_orderbook(self, orderbook: list):
         self.client.publish(self.topic_bids, json.dumps(orderbook))
@@ -95,15 +113,24 @@ class BatteryClient:
             broker, port = MQTT_BATTERY_BROKER, MQTT_BATTERY_PORT
         else:
             broker, port = MQTT_LOCAL_BROKER, MQTT_LOCAL_PORT
-        self.client.connect(broker, port, 60)
+        self.client.reconnect_delay_set(min_delay=1, max_delay=30)
+        self.client.connect_async(broker, port, 60)
         self.client.loop_start()
-        print(f"MQTT: battery client for {self.agent.agent_id} connected")
+        print(f"MQTT: battery client for {self.agent.agent_id} connecting to {broker}:{port}")
 
     def _on_connect(self, client, userdata, flags, reason_code, properties):
+        if reason_code != 0:
+            print(f"MQTT: battery client for {self.agent.agent_id} refused: {reason_code}")
+            return
         client.subscribe(self.topic_response)
+        print(f"MQTT: battery client for {self.agent.agent_id} connected")
 
     def _on_message(self, client, userdata, message):
         print(f"MQTT [battery] response on {message.topic}: {message.payload.decode()}")
+
+    def stop(self):
+        self.client.loop_stop()
+        self.client.disconnect()
 
     def send_power_request(self, power_request: dict):
         power_request["request_id"] = self.agent.agent_id

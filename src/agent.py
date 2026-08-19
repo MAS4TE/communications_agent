@@ -1,35 +1,40 @@
 """The Agent — one prosumer's autonomous trading agent.
 
-This single object replaces the old grab-bag of module globals and get/set
-functions (main_context.py): it holds everything one agent needs and is passed
-around explicitly.
+One object holds everything one agent needs:
 
-It owns:
   - identity        : profile_id, agent_id
   - prosumer data   : profile, preferences (editable in the UI)
   - the chat brain  : the LLM, its tools, and the conversation history
   - the market link : the MQTT market and battery clients
-  - pipeline memory : live status, the last bidding run, and trace history that
-                      the chat assistant reads back to explain what happened
+  - pipeline memory : live status, the last bidding run, and the traces the chat
+                      assistant reads back to explain what happened
 
-The two ``handle_*`` methods are the entry points the MarketClient calls when an
-MQTT message arrives; the lock ensures only one pipeline runs at a time.
+How work flows through the agent, and why there is no asyncio anywhere:
+
+    paho's MQTT thread  ->  self.jobs (a queue)  ->  the worker thread
+
+The MQTT callback must return immediately — while it is running, paho cannot
+send keepalive pings and the broker drops us. So the callback only puts the
+message on a queue. One worker thread takes jobs off that queue and runs the
+pipeline. Because there is exactly one worker, two pipeline runs can never
+overlap and nothing needs locking.
 """
-import asyncio
+import queue
+import threading
+import traceback
 
 from llm import build_chat_tools, build_llm, build_system_message
 from market.bidding import run_bidding
 from market.clearing import run_clearing
-from market.flow import PipelineStatus
 from market.mqtt import BatteryClient, MarketClient
+from market.pipeline import PipelineStatus
 from prosumer import DEFAULT_PREFERENCES, load_profile
 
 
 class Agent:
-    def __init__(self, profile_id: int, agent_id: str, loop: asyncio.AbstractEventLoop):
+    def __init__(self, profile_id: int, agent_id: str):
         self.profile_id = profile_id
         self.agent_id = agent_id
-        self.loop = loop
 
         # Prosumer data.
         self.profile = load_profile(profile_id)
@@ -45,21 +50,42 @@ class Agent:
 
         # Pipeline memory.
         self.pipeline_status = PipelineStatus()
-        self.lock = asyncio.Lock()
         self.bid_counter = 0
         self.last_bidding_data: dict = {}
         self.last_bid_trace: list = []
         self.clearing_traces: list = []
 
-        # Market link.
+        # Market link and the one worker that runs pipelines.
         self.market_client = MarketClient(self)
         self.battery_client = BatteryClient(self)
+        self.jobs: queue.Queue = queue.Queue()
 
     # -- lifecycle ---------------------------------------------------------
-    def connect(self):
-        """Connect both MQTT clients (call once at startup)."""
+    def start(self):
+        """Start the worker and connect both MQTT clients (call once)."""
+        threading.Thread(target=self._work, name=f"{self.agent_id}-pipeline",
+                         daemon=True).start()
         self.market_client.start()
         self.battery_client.start()
+
+    def _work(self):
+        """Run queued pipelines, one at a time, forever."""
+        while True:
+            pipeline, market_data = self.jobs.get()
+            try:
+                pipeline(self, market_data)
+            except Exception:
+                # One bad market message must not kill the worker: log it and
+                # stay ready for the next one.
+                print(f"PIPELINE: {pipeline.__name__} failed for {self.agent_id}")
+                traceback.print_exc()
+
+    # -- market events (called from the MQTT thread) -----------------------
+    def on_market_open(self, market_data: dict):
+        self.jobs.put((run_bidding, market_data))
+
+    def on_market_result(self, market_data: dict):
+        self.jobs.put((run_clearing, market_data))
 
     # -- preferences -------------------------------------------------------
     def update_preferences(self, **changes):
@@ -70,15 +96,6 @@ class Agent:
         bid_id = self.bid_counter
         self.bid_counter += 1
         return bid_id
-
-    # -- market events (called from the MQTT thread via the event loop) ----
-    async def handle_market_open(self, market_data: dict):
-        async with self.lock:
-            await run_bidding(self, market_data)
-
-    async def handle_market_clearing(self, market_data: dict):
-        async with self.lock:
-            await run_clearing(self, market_data)
 
     # -- chat --------------------------------------------------------------
     def chat(self, message: str, preferences: dict | None = None) -> str:

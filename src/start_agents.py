@@ -1,38 +1,19 @@
-import subprocess
+"""Start every agent from agents.toml, without the external services.
+
+Kept for the workflow the README describes (`python start_agents.py` from src/).
+It is a thin wrapper around launch.py so there is only one agent list and one
+piece of process-handling code — the old copy-pasted list here is gone, as is
+the Windows-only CREATE_NEW_CONSOLE that made this script unusable elsewhere.
+
+    python start_agents.py                 all agents, no services
+    python start_agents.py --agents B_01   just one
+"""
+import runpy
 import sys
-import os
+from pathlib import Path
 
-# agents = [
-#     {"PROFILE_ID": "3",   "AGENT_ID": "B_01"},
-#     {"PROFILE_ID": "152", "AGENT_ID": "B_02"},
-#     {"PROFILE_ID": "84",  "AGENT_ID": "S_01"},
-#     {"PROFILE_ID": "92",  "AGENT_ID": "S_02"},
-# ]
+LAUNCHER = Path(__file__).resolve().parent.parent / "launch.py"
 
-agents = [
-    {"PROFILE_ID": "3",   "AGENT_ID": "B_01"},
-    {"PROFILE_ID": "152", "AGENT_ID": "B_02"},
-    {"PROFILE_ID": "9",   "AGENT_ID": "B_03"},
-    {"PROFILE_ID": "33",  "AGENT_ID": "B_04"},
-    {"PROFILE_ID": "96",  "AGENT_ID": "B_05"},
-    {"PROFILE_ID": "168", "AGENT_ID": "B_06"},
-    {"PROFILE_ID": "18",  "AGENT_ID": "B_07"},
-    {"PROFILE_ID": "84",  "AGENT_ID": "S_01"},
-    {"PROFILE_ID": "92",  "AGENT_ID": "S_02"},
-    {"PROFILE_ID": "87",  "AGENT_ID": "S_03"},
-]
-
-port = 8001
-
-for agent in agents:
-    env = os.environ.copy()
-    env["PROFILE_ID"] = agent["PROFILE_ID"]
-    env["AGENT_ID"] = agent["AGENT_ID"]
-    port = port + 1
-    
-    subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "main:app", "--port", str(port)],
-        env=env,
-        creationflags=subprocess.CREATE_NEW_CONSOLE
-    )
-    print(f"Started agent {agent['AGENT_ID']} with profile {agent['PROFILE_ID']} on port {port}")
+if __name__ == "__main__":
+    sys.argv = [str(LAUNCHER), "--no-services", *sys.argv[1:]]
+    runpy.run_path(str(LAUNCHER), run_name="__main__")

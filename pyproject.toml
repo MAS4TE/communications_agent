@@ -7,10 +7,44 @@ name = "mas4te-communication-agent"
 version = "0.1.0"
 description = "MAS4TE communication agent"
 readme = "README.md"
-requires-python = ">=3.8"
+# `str | None` annotations are evaluated at import time, so 3.10 is the floor.
+requires-python = ">=3.11"   # tomllib, used by agents_config.py
 authors = [ { name = "maintainer", email = "maintainer@example.com" } ]
 license = { text = "MIT" }
-dependencies = []
+dependencies = [
+    # web app
+    "fastapi >=0.110",
+    "uvicorn[standard] >=0.27",
+    "pydantic >=2.0",
+    # market link
+    "paho-mqtt >=2.0",
+    # data + forecasting service client
+    "pandas >=2.0",
+    "numpy >=1.24",
+    "requests >=2.31",
+    "pyyaml >=6.0",
+    # chat backend (Mistral and OpenAI both speak this protocol)
+    "openai >=1.30",
+    # The optimiser. NOT on PyPI — it must come from the sibling checkout.
+    # uv resolves it via [tool.uv.sources] below; with plain pip, install it
+    # first:  pip install -e ../battery-utility-calculator
+    "battery-utility-calculator >=0.3.0",
+]
+
+[project.optional-dependencies]
+# Local LM Studio chat backend (config.LLM_BACKEND = "lmstudio").
+lmstudio = ["lmstudio >=1.0"]
+dev = ["pytest >=7.2"]
+
+[project.scripts]
+mas4te-agents = "launch:main"
+
+[tool.setuptools]
+py-modules = ["launch"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# battery-utility-calculator is not on PyPI — resolve it from the sibling checkout.
+[tool.uv.sources]
+battery-utility-calculator = { path = "../battery-utility-calculator", editable = true }

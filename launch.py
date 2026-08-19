@@ -1,103 +1,444 @@
+"""Start the whole MAS4TE stack: the external services and every agent.
+
+    python launch.py --check      report what is ready and what is missing
+    python launch.py              start everything in agents.toml and supervise it
+    python launch.py --agents B_01,S_01 --no-services
+    python launch.py --only-agents
+
+Which agents run, and where the services they depend on live, is configured in
+agents.toml — not in this file.
+
+Replaces the old Windows-only launcher (CREATE_NEW_CONSOLE, cmd /k,
+venv/Scripts/*.exe): processes are started head-less on every platform, their
+output is tee'd into logs/, and Ctrl-C shuts the whole tree down in order.
+A service whose directory is missing is reported and skipped instead of taking
+the launch down with it.
+"""
+from __future__ import annotations
+
+import argparse
 import os
+import signal
+import socket
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
+from dataclasses import dataclass
+from pathlib import Path
 
-print(sys.executable)
+ROOT = Path(__file__).resolve().parent
+SRC = ROOT / "src"
+LOG_DIR = ROOT / "logs"
 
+sys.path.insert(0, str(SRC))
 
-BASE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.abspath(os.path.join(BASE, "..", ".."))
-
-# Chronos
-chronos_cwd     = os.path.join(ROOT, "chronos_forecaster")
-chronos_uvicorn = os.path.join(ROOT, "chronos_forecaster", "venv", "Scripts", "uvicorn.exe")
-
-subprocess.Popen(
-    [chronos_uvicorn, "src.main:app", "--host", "127.0.0.1", "--port", "8000"],
-    cwd=chronos_cwd,
-    creationflags=subprocess.CREATE_NEW_CONSOLE
+from agents_config import (  # noqa: E402  (needs SRC on the path first)
+    AgentSpec,
+    ServiceSpec,
+    load_agents,
+    load_broker,
+    load_services,
 )
-print("Chronos started!")
+
+IS_WINDOWS = os.name == "nt"
+AGENT_BOOT_TIMEOUT = 90          # seconds to wait for an agent's web UI
+SHUTDOWN_GRACE = 10              # seconds between SIGTERM and SIGKILL
 
 
+# --------------------------------------------------------------------------
+# Process handling
+# --------------------------------------------------------------------------
+@dataclass
+class Child:
+    name: str
+    process: subprocess.Popen
+    log_path: Path
+    log_file: object
 
-# Battery
-battery_cwd    = os.path.join(ROOT, "mas4te_battery", "battery_simulation")
-battery_python = os.path.join(ROOT, "mas4te_battery", "battery_simulation", "venv", "Scripts", "python.exe")
+    @property
+    def alive(self) -> bool:
+        return self.process.poll() is None
 
-# use battery venv if it exists, otherwise fall back to system python
-if os.path.exists(battery_python):
-    battery_exe = battery_python
-else:
-    battery_exe = "python"
 
-subprocess.Popen(
-    [battery_exe, "main_api_mqtt.py"],
-    cwd=battery_cwd,
-    creationflags=subprocess.CREATE_NEW_CONSOLE
-)
-print("Battery started!")
+def _spawn(name: str, command: list[str], cwd: Path, env: dict | None = None) -> Child:
+    """Start one child process, its output going to logs/<name>.log."""
+    LOG_DIR.mkdir(exist_ok=True)
+    log_path = LOG_DIR / f"{name}.log"
+    log_file = open(log_path, "w", buffering=1, encoding="utf-8", errors="replace")
 
-# Wait for everything to boot before starting agents
-print("\nWaiting 10s for services to boot...")
-time.sleep(10)
+    # A separate process group so Ctrl-C in this terminal doesn't race us to the
+    # children — the supervisor decides when they stop, and in which order.
+    if IS_WINDOWS:
+        extra = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+    else:
+        extra = {"start_new_session": True}
 
-# Agents
-# agents = [
-#     {"PROFILE_ID": "3",   "AGENT_ID": "B_01"},
-#     {"PROFILE_ID": "152", "AGENT_ID": "B_02"},
-#     {"PROFILE_ID": "84",  "AGENT_ID": "S_01"},
-#     {"PROFILE_ID": "92",  "AGENT_ID": "S_02"},
-# ]
-
-agents = [
-    {"PROFILE_ID": "3",   "AGENT_ID": "B_01"},
-    # {"PROFILE_ID": "152", "AGENT_ID": "B_02"},
-    # {"PROFILE_ID": "9",   "AGENT_ID": "B_03"},
-    # {"PROFILE_ID": "33",  "AGENT_ID": "B_04"},
-    # {"PROFILE_ID": "96",  "AGENT_ID": "B_05"},
-    # {"PROFILE_ID": "168", "AGENT_ID": "B_06"},
-    # {"PROFILE_ID": "18",  "AGENT_ID": "B_07"},
-    {"PROFILE_ID": "84",  "AGENT_ID": "S_01"},
-#     {"PROFILE_ID": "92",  "AGENT_ID": "S_02"},
-#     {"PROFILE_ID": "87",  "AGENT_ID": "S_03"},
-]
-
-agents_src    = os.path.join(BASE, "src")
-agents_python = os.path.join(BASE, "venv2", "Scripts", "python.exe")
-
-port = 8001
-for agent in agents:
-    port += 1
-    env = os.environ.copy()
-    env["PROFILE_ID"] = agent["PROFILE_ID"]
-    env["AGENT_ID"]   = agent["AGENT_ID"]
-
-    subprocess.Popen(
-        ["cmd", "/k", sys.executable, "-m", "uvicorn", "main:app", "--port", str(port)],
-        cwd=agents_src,
-        env=env,
-        creationflags=subprocess.CREATE_NEW_CONSOLE
+    process = subprocess.Popen(
+        command,
+        cwd=str(cwd),
+        env={**os.environ, **(env or {})},
+        stdout=log_file,
+        stderr=subprocess.STDOUT,
+        **extra,
     )
-    print(f"{agent['AGENT_ID']}  (profile {agent['PROFILE_ID']})  →  port {port}")
+    return Child(name=name, process=process, log_path=log_path, log_file=log_file)
 
 
-time.sleep(1)
+def _terminate(child: Child) -> None:
+    """Ask a child (and anything it spawned) to stop, then insist."""
+    if not child.alive:
+        return
+    try:
+        if IS_WINDOWS:
+            child.process.terminate()
+        else:
+            os.killpg(os.getpgid(child.process.pid), signal.SIGTERM)
+    except (ProcessLookupError, PermissionError, OSError):
+        return
 
-# Assume
-assume_cwd    = os.path.join(ROOT, "assume")
-assume_python = os.path.join(assume_cwd, ".assume-venv", "Scripts", "python.exe")
+    try:
+        child.process.wait(timeout=SHUTDOWN_GRACE)
+    except subprocess.TimeoutExpired:
+        print(f"  {child.name} ignored SIGTERM — killing")
+        try:
+            if IS_WINDOWS:
+                child.process.kill()
+            else:
+                os.killpg(os.getpgid(child.process.pid), signal.SIGKILL)
+        except (ProcessLookupError, PermissionError, OSError):
+            pass
 
-print(assume_cwd)
-print(assume_python)
-print( ["cmd", "/k", assume_python, "mas4te/simulation.py"])
 
-subprocess.Popen(
-    ["cmd", "/k", assume_python, "mas4te/simulation.py"],
-    cwd=assume_cwd,
-    creationflags=subprocess.CREATE_NEW_CONSOLE
-)
-print("Assume started!")
+def shutdown(children: list[Child]) -> None:
+    print("\nShutting down...")
+    for child in reversed(children):          # services started last stop first
+        print(f"  stopping {child.name}")
+        _terminate(child)
+        child.log_file.close()
+    print("All stopped.")
 
-print("\nAll systems launched!")
+
+# --------------------------------------------------------------------------
+# Health checks
+# --------------------------------------------------------------------------
+def tcp_open(host: str, port: int, timeout: float = 1.0) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def http_ok(url: str, timeout: float = 2.0) -> bool:
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as response:
+            return response.status < 500
+    except urllib.error.HTTPError as error:
+        return error.code < 500          # a 404 still means something is listening
+    except (urllib.error.URLError, OSError):
+        return False
+
+
+def wait_for(check, timeout: float, interval: float = 0.5) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if check():
+            return True
+        time.sleep(interval)
+    return False
+
+
+def service_python(service: ServiceSpec) -> str:
+    """The interpreter a service should run under: its own venv, or ours."""
+    if service.venv:
+        candidates = [
+            service.path / service.venv / "bin" / "python",
+            service.path / service.venv / "Scripts" / "python.exe",
+        ]
+        for candidate in candidates:
+            if candidate.exists():
+                return str(candidate)
+    return sys.executable
+
+
+# --------------------------------------------------------------------------
+# Preflight
+# --------------------------------------------------------------------------
+def preflight(agents: list[AgentSpec], services: list[ServiceSpec]) -> bool:
+    """Report everything the stack needs. Returns True if agents can start."""
+    ok = True
+    print("Python      :", sys.executable)
+
+    print("\nDependencies")
+    missing = []
+    for module in ("fastapi", "uvicorn", "pandas", "paho.mqtt.client", "openai",
+                   "yaml", "requests", "battery_utility_calculator"):
+        try:
+            __import__(module)
+        except ImportError:
+            missing.append(module)
+    if missing:
+        ok = False
+        print(f"  MISSING: {', '.join(missing)}")
+        print("  fix: uv pip install -e .            (or: pip install -e .)")
+    else:
+        print("  all installed")
+
+    print("\nBattery Utility Calculator")
+    try:
+        import battery_utility_calculator as buc
+        from importlib.metadata import version
+
+        location = Path(buc.__file__).resolve().parent.parent
+        print(f"  version {version('battery-utility-calculator')} from {location}")
+        if (location / ".git").is_dir():
+            import subprocess as sp
+
+            branch = sp.run(["git", "-C", str(location), "rev-parse", "--abbrev-ref", "HEAD"],
+                            capture_output=True, text=True).stdout.strip()
+            head = sp.run(["git", "-C", str(location), "log", "-1", "--format=%h %s"],
+                          capture_output=True, text=True).stdout.strip()
+            print(f"  git: branch {branch}, {head}")
+        else:
+            print("  WARNING: not an editable checkout — this is how a stale copy sneaks in.")
+            print("  fix: pip install -e ../battery-utility-calculator")
+    except ImportError:
+        ok = False
+        print("  NOT INSTALLED")
+        print("  fix: pip install -e ../battery-utility-calculator")
+
+    print("\nProsumer data")
+    from config import DATA_DIR                    # noqa: PLC0415  (honours MAS4TE_DATA_DIR)
+
+    if not DATA_DIR.is_dir():
+        ok = False
+        print(f"  MISSING: {DATA_DIR}")
+        print("  fix: copy the git-ignored data/ directory (profiles, prices, forecasts) into src/,")
+        print("       or point MAS4TE_DATA_DIR at where it already lives")
+    else:
+        from prosumer import load_profile          # noqa: PLC0415  (needs data/ to exist)
+
+        print(f"  using {DATA_DIR}")
+        broken = []
+        for agent in agents:
+            try:
+                load_profile(agent.profile_id)
+            except Exception as error:
+                broken.append(f"{agent.agent_id} (profile {agent.profile_id}): {error}")
+        if broken:
+            ok = False
+            print("  profiles that will not load:")
+            for line in broken:
+                print(f"    {line}")
+        else:
+            print(f"  all {len(agents)} profiles load")
+
+    print("\nMQTT broker")
+    host, port = load_broker()
+    if tcp_open(host, port):
+        print(f"  reachable at {host}:{port}")
+    else:
+        # Not fatal: the agents connect asynchronously and retry, so they can
+        # start now and join the market when the broker comes up.
+        print(f"  NOT reachable at {host}:{port} — agents will start and keep retrying")
+        print("  fix: start an MQTT broker, e.g. `mosquitto -p 1883`")
+
+    print("\nLLM")
+    if os.environ.get("MISTRAL_API_KEY") or (SRC / "mas4te_mistral_api_key.yml").exists():
+        print("  Mistral key found — chat assistant enabled")
+    else:
+        print("  no API key — chat falls back to the offline backend (trading is unaffected)")
+        print("  fix: create src/mas4te_mistral_api_key.yml with `mistral_api_key: ...`")
+
+    print("\nExternal services")
+    for service in services:
+        if not service.enabled:
+            print(f"  {service.name:9} disabled in agents.toml")
+        elif service.available:
+            print(f"  {service.name:9} found at {service.path}")
+        else:
+            print(f"  {service.name:9} MISSING at {service.path} — will be skipped")
+
+    print("\nAgents")
+    for agent in agents:
+        busy = " (PORT ALREADY IN USE)" if tcp_open("127.0.0.1", agent.port) else ""
+        if busy:
+            ok = False
+        print(f"  {agent.agent_id:6} profile {agent.profile_id:<4} -> http://localhost:{agent.port}{busy}")
+
+    print("\n" + ("READY" if ok else "NOT READY — fix the items above"))
+    return ok
+
+
+# --------------------------------------------------------------------------
+# Starting things
+# --------------------------------------------------------------------------
+def start_service(service: ServiceSpec) -> Child | None:
+    if not service.enabled:
+        print(f"SKIP  {service.name}: disabled in agents.toml")
+        return None
+    if not service.available:
+        print(f"SKIP  {service.name}: {service.path} does not exist")
+        return None
+
+    command = [service_python(service), *service.command]
+    child = _spawn(service.name, command, cwd=service.path)
+    print(f"START {service.name} (pid {child.process.pid}) -> {child.log_path}")
+
+    if service.health_url:
+        if wait_for(lambda: http_ok(service.health_url), timeout=60):
+            print(f"      {service.name} is answering on {service.health_url}")
+        else:
+            print(f"      WARNING: {service.name} did not answer on {service.health_url} in 60s "
+                  f"(see {child.log_path})")
+    return child
+
+
+def start_agent(agent: AgentSpec) -> Child:
+    command = [
+        sys.executable, "-m", "uvicorn", "main:app",
+        "--host", "127.0.0.1", "--port", str(agent.port),
+    ]
+    broker_host, broker_port = load_broker()
+    env = {
+        "PROFILE_ID": str(agent.profile_id),
+        "AGENT_ID": agent.agent_id,
+        # agents.toml is the single source of truth for the broker, so config.py
+        # picks it up from here rather than from its own default.
+        "MQTT_LOCAL_BROKER": broker_host,
+        "MQTT_LOCAL_PORT": str(broker_port),
+    }
+    child = _spawn(agent.agent_id, command, cwd=SRC, env=env)
+    print(f"START {agent.agent_id:6} profile {agent.profile_id:<4} "
+          f"pid {child.process.pid} -> http://localhost:{agent.port}")
+    return child
+
+
+def wait_for_agents(agents: list[AgentSpec], children: list[Child]) -> bool:
+    """Block until every agent answers on /pipeline/status, or one dies."""
+    by_name = {child.name: child for child in children}
+    all_up = True
+
+    for agent in agents:
+        child = by_name.get(agent.agent_id)
+        url = f"http://127.0.0.1:{agent.port}/pipeline/status"
+
+        def ready(url=url, child=child):
+            if child is not None and not child.alive:
+                return True                    # died: stop waiting, report below
+            return http_ok(url)
+
+        wait_for(ready, timeout=AGENT_BOOT_TIMEOUT)
+
+        if child is not None and not child.alive:
+            all_up = False
+            print(f"FAILED {agent.agent_id} exited with code {child.process.returncode}")
+            print(_tail(child.log_path))
+        elif http_ok(url):
+            print(f"UP    {agent.agent_id} on http://localhost:{agent.port}")
+        else:
+            all_up = False
+            print(f"SLOW  {agent.agent_id} not answering after {AGENT_BOOT_TIMEOUT}s "
+                  f"(see {child.log_path if child else '?'})")
+    return all_up
+
+
+def _tail(path: Path, lines: int = 15) -> str:
+    try:
+        content = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return "  (no log)"
+    return "\n".join(f"  | {line}" for line in content[-lines:])
+
+
+def supervise(children: list[Child]) -> None:
+    """Watch the children until Ctrl-C, reporting any that die."""
+    print("\nRunning. Ctrl-C to stop everything.\n")
+    reported: set[str] = set()
+    while True:
+        time.sleep(1)
+        for child in children:
+            if not child.alive and child.name not in reported:
+                reported.add(child.name)
+                print(f"EXIT  {child.name} stopped with code {child.process.returncode}")
+                print(_tail(child.log_path))
+        if all(not child.alive for child in children):
+            print("\nEvery process has exited.")
+            return
+
+
+# --------------------------------------------------------------------------
+# Entry point
+# --------------------------------------------------------------------------
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--check", action="store_true",
+                        help="only report what is ready and what is missing")
+    parser.add_argument("--agents", default=None,
+                        help="comma-separated agent ids to start (default: all of agents.toml)")
+    parser.add_argument("--no-services", "--only-agents", dest="no_services",
+                        action="store_true", help="do not start Chronos, battery or ASSUME")
+    parser.add_argument("--force", action="store_true",
+                        help="start even if the preflight check fails")
+    args = parser.parse_args()
+
+    agents = load_agents()
+    if args.agents:
+        wanted = {name.strip() for name in args.agents.split(",") if name.strip()}
+        unknown = wanted - {agent.agent_id for agent in agents}
+        if unknown:
+            print(f"Unknown agent ids: {sorted(unknown)}", file=sys.stderr)
+            return 2
+        agents = [agent for agent in agents if agent.agent_id in wanted]
+
+    services = [] if args.no_services else load_services()
+
+    ready = preflight(agents, services)
+    if args.check:
+        return 0 if ready else 1
+    if not ready and not args.force:
+        print("\nRefusing to start. Fix the above, or re-run with --force.")
+        return 1
+
+    if len(agents) > 3:
+        # One agent is one uvicorn process plus an optimiser run per market
+        # opening; the full roster needs a machine that can take it.
+        print(f"\nNOTE: starting {len(agents)} agents ({len(agents)} processes). "
+              f"On a small machine use --agents B_01,S_01 instead.")
+
+    print("\n" + "-" * 70)
+    children: list[Child] = []
+    try:
+        for service in services:
+            if not service.start_after_agents:
+                child = start_service(service)
+                if child:
+                    children.append(child)
+
+        for agent in agents:
+            children.append(start_agent(agent))
+
+        print("\nWaiting for the agents to come up...")
+        wait_for_agents(agents, children)
+
+        # ASSUME drives the market clock, so it goes last: the agents are
+        # subscribed by now and won't miss the first market_open.
+        for service in services:
+            if service.start_after_agents:
+                child = start_service(service)
+                if child:
+                    children.append(child)
+
+        supervise(children)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        shutdown(children)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

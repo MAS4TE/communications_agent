@@ -1,72 +1,69 @@
-"""The clearing pipeline — runs when the market clears.
+"""The clearing pipeline — runs when the market publishes its result.
 
-Triggered by a ``market result`` MQTT message, this reads how much volume was
-accepted and then sends the resulting battery schedule:
+Read this file top to bottom: it is the complete answer to "what does the agent
+do once it knows what was accepted?"
 
-  - Buyers rent virtual storage, so the schedule (state-of-charge over time for
-    each price source) goes to the BRP REST API.
-  - Sellers own a physical battery; only the part they keep for themselves
-    (total minus what they rented out) is scheduled, and it goes to the battery
-    over MQTT.
+  - Buyers rent virtual storage, so the schedule (state of charge over time per
+    price source) goes to the BRP REST API.
+  - Sellers own a physical battery. Only the part they keep for themselves
+    (total minus what they rented out) gets scheduled, and it goes to the
+    battery over MQTT.
 
-The forecasts and charge schedules computed during bidding are reused here via
-``agent.last_bidding_data`` (merged into this run's context).
+The forecasts computed during bidding are reused here — run_clearing starts from
+a copy of the last bidding run's data.
 """
 import pandas as pd
 import requests
+from battery_utility_calculator import Storage, calculate_multiple_storage_worth
 from requests.auth import HTTPBasicAuth
 
-from battery_utility import Storage
-import battery_utility
-from config import POWER_REQUEST_URL, rest_api_credentials
-from market.bidding import _to_series
-from market.flow import MarketContext, run_blocking, run_pipeline
+from config import DRY_RUN, POWER_REQUEST_URL, SOLVER, rest_api_credentials
+from market.bidding import C_RATE, forecast_inputs
+from market.pipeline import MarketContext, run_pipeline
 
 
 # --------------------------------------------------------------------------
 # Helpers
 # --------------------------------------------------------------------------
-async def soc_to_power_request(charge_by_volume: dict) -> dict:
-    """Turn per-storage state-of-charge series into a battery power request.
+def soc_to_power_request(soc: pd.DataFrame) -> dict:
+    """Turn a state-of-charge schedule into a battery power request.
 
-    Sums the SOC across sources, differentiates to get power (W) per 15-min step.
+    Sums the SOC across sources, then differentiates to get power (W) per step.
     """
-    total_soc = pd.concat(charge_by_volume.values(), axis=1).sum(axis=1)
+    total_soc = soc.sum(axis=1)
     power_kw = (total_soc.diff() / 0.25).fillna(0)        # 0.25 h per step
     seconds = (total_soc.index - total_soc.index[0]).total_seconds().astype(int)
-    return {
-        "time_steps": seconds.tolist(),
-        "power_rate_w": (power_kw * 1000).tolist(),
-    }
+    return {"time_steps": seconds.tolist(), "power_rate_w": (power_kw * 1000).tolist()}
 
 
-async def _charge_schedule_for(ctx: MarketContext, volume: float) -> pd.DataFrame | None:
-    """The SOC schedule for a given volume — from the bidding cache, or recomputed."""
+def charge_schedule_for(ctx: MarketContext, volume: float) -> pd.DataFrame | None:
+    """The SOC schedule for one volume — from the bidding run, or recomputed.
+
+    Sellers get theirs from bidding for free. Buyers never do: the by-location
+    entry point the bidding step uses returns only a DataFrame and drops the
+    charge timeseries, so their schedule is optimised again here, once, for the
+    volume the market actually accepted.
+    """
     cached = ctx.data.get("buc_charge_series", {}).get(volume)
     if cached is not None:
         return cached
 
     preferences = ctx.data.get("preferences", {})
     is_buyer = ctx.data.get("storage_size_kwh", 0) <= 0
-    demand = _to_series(ctx.data["demand_fc"])
-    index = demand.index
-    prices = ctx.data["prices_fc"]
+    series = forecast_inputs(ctx)
+    community = series.pop("community")
+    my_location = ctx.data.get("location", "aachen").lower()
 
-    result = await run_blocking(
-        battery_utility.storage_worth,
-        baseline_storage=Storage(id=0, c_rate=0.2, volume=0),
-        storages=[Storage(id=volume, c_rate=0.2, volume=volume)],
-        demand=demand,
-        solar=_to_series(ctx.data["solar_fc"]).reindex(index, method="nearest"),
-        grid_prices=_to_series(prices.get("supplier")).reindex(index, method="nearest"),
-        eeg_prices=_to_series(prices.get("eeg")).reindex(index, method="nearest"),
-        community_prices=_to_series(prices.get("community")).reindex(index, method="nearest"),
-        wholesale_prices=_to_series(prices.get("wholesale")).reindex(index, method="nearest"),
-        my_location=ctx.data.get("location", "aachen"),
-        is_buyer=is_buyer,
-        trading_scope=preferences.get("trading_scope", "All"),
+    result = calculate_multiple_storage_worth(
+        baseline_storage=Storage(id=0, c_rate=C_RATE, volume=0),
+        storages_to_calculate=[Storage(id=volume, c_rate=C_RATE, volume=volume)],
+        community_market_prices={my_location: community},
+        my_location=my_location,
+        is_rented_storage=is_buyer,
         goal="max_green_energy" if preferences.get("trading_preference") == "Green" else "max_cashflow",
+        solver=SOLVER,
         return_charge_timeseries=True,
+        **series,
     )
     return result.get("storages_to_calc_charge_ts", {}).get(volume)
 
@@ -74,7 +71,7 @@ async def _charge_schedule_for(ctx: MarketContext, volume: float) -> pd.DataFram
 # --------------------------------------------------------------------------
 # Steps
 # --------------------------------------------------------------------------
-async def retrieve_clearing_info(ctx: MarketContext):
+def retrieve_clearing_info(ctx: MarketContext):
     orderbook = ctx.market_data.get("orderbook", [])
     role = "seller" if ctx.data.get("storage_size_kwh", 0) > 0 else "buyer"
 
@@ -96,41 +93,47 @@ async def retrieve_clearing_info(ctx: MarketContext):
     )
 
 
-async def publish_battery_schedule(ctx: MarketContext):
+def publish_battery_schedule(ctx: MarketContext):
     if ctx.data.get("storage_size_kwh", 0) > 0:
-        await _publish_seller_schedule(ctx)
+        _publish_seller_schedule(ctx)
     else:
-        await _publish_buyer_schedule(ctx)
+        _publish_buyer_schedule(ctx)
 
 
-async def _publish_buyer_schedule(ctx: MarketContext):
+def _publish_buyer_schedule(ctx: MarketContext):
     """Buyer: send the rented-storage SOC schedule to the BRP REST API."""
     volume = ctx.data.get("accepted_volume_kwh", 0)
     if volume == 0:
         ctx.log("publish_battery_schedule", "No volume accepted — schedule not sent.")
         return
 
-    df = await _charge_schedule_for(ctx, volume)
-    if df is None:
+    soc = charge_schedule_for(ctx, volume)
+    if soc is None:
         ctx.log("publish_battery_schedule", "No SOC schedule available — step skipped.")
         return
 
     payload = {
         "request_id": ctx.agent.agent_id,
-        "time_steps": df.index.astype(str).tolist(),
-        "eeg": df["soc_eeg"].tolist(),
-        "wholesale": df["soc_wholesale"].tolist(),
-        "community": df["soc_community"].tolist(),
-        "home": df["soc_home"].tolist(),
+        "time_steps": soc.index.astype(str).tolist(),
+        "eeg": soc["soc_eeg"].tolist(),
+        "wholesale": soc["soc_wholesale"].tolist(),
+        "community": soc["soc_community"].tolist(),
+        "home": soc["soc_home"].tolist(),
     }
 
+    if DRY_RUN:
+        ctx.log("publish_battery_schedule", "Dry run — buyer schedule computed but not sent.",
+                {"role": "buyer", "accepted_volume_kwh": volume,
+                 "timesteps": len(payload["time_steps"])})
+        return
+
     username, password = rest_api_credentials()
-    response = await run_blocking(
-        requests.post,
+    response = requests.post(
         POWER_REQUEST_URL,
         auth=HTTPBasicAuth(username, password),
         json=payload,
         params={"is_real_world_test": False},   # False = simulation, no physical battery
+        timeout=60,
     )
     print(f"CLEARING: buyer schedule POST -> {response.status_code}")
 
@@ -138,7 +141,7 @@ async def _publish_buyer_schedule(ctx: MarketContext):
             {"role": "buyer", "accepted_volume_kwh": volume, "timesteps": len(payload["time_steps"])})
 
 
-async def _publish_seller_schedule(ctx: MarketContext):
+def _publish_seller_schedule(ctx: MarketContext):
     """Seller: schedule only the own-use part of the battery, via MQTT."""
     total = ctx.data["storage_size_kwh"]
     rented = ctx.data.get("accepted_volume_kwh", 0)
@@ -148,12 +151,17 @@ async def _publish_seller_schedule(ctx: MarketContext):
         ctx.log("publish_battery_schedule", "Entire battery rented out — no own-use schedule sent.")
         return
 
-    df = await _charge_schedule_for(ctx, own_volume)
-    if df is None:
+    soc = charge_schedule_for(ctx, own_volume)
+    if soc is None:
         ctx.log("publish_battery_schedule", "No SOC schedule available — step skipped.")
         return
 
-    power_request = await soc_to_power_request({own_volume: df})
+    power_request = soc_to_power_request(soc)
+    if DRY_RUN:
+        ctx.log("publish_battery_schedule", "Dry run — seller schedule computed but not sent.",
+                {"role": "seller", "own_use_kwh": own_volume,
+                 "timesteps": len(power_request["time_steps"])})
+        return
     ctx.agent.battery_client.send_power_request(power_request)
 
     ctx.log("publish_battery_schedule", "Sent own-use battery schedule to the battery via MQTT (seller).",
@@ -167,10 +175,10 @@ CLEARING_STEPS = [
 ]
 
 
-async def run_clearing(agent, market_data: dict) -> MarketContext:
+def run_clearing(agent, market_data: dict) -> MarketContext:
     """Run the full clearing pipeline for one market-result event."""
-    # Reuse the forecasts and charge schedules from the matching bidding run.
+    # Start from the matching bidding run, so the forecasts are already there.
     ctx = MarketContext(agent=agent, market_data=market_data, data=dict(agent.last_bidding_data))
-    await run_pipeline(ctx, CLEARING_STEPS, agent.pipeline_status)
+    run_pipeline(ctx, CLEARING_STEPS, agent.pipeline_status)
     agent.clearing_traces.append(ctx.trace)
     return ctx
