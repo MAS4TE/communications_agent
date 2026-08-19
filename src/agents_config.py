@@ -1,16 +1,17 @@
-"""Reading agents.toml — the one place that says which agents exist.
+"""Reading agents.yml — the one place that says which agents exist.
 
 launch.py, start_agents.py and market/clear_retained.py all used to carry their
 own copy-pasted agent list, which is how they drifted apart. They all read this
 module instead now.
 
-The file lives next to the repo root (../agents.toml relative to src/).
+The file lives at the repo root (../agents.yml relative to src/).
 """
-import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-CONFIG_FILE = Path(__file__).resolve().parent.parent / "agents.toml"
+import yaml
+
+CONFIG_FILE = Path(__file__).resolve().parent.parent / "agents.yml"
 
 
 @dataclass(frozen=True)
@@ -45,13 +46,17 @@ class ServiceSpec:
 
 def _load(config_file: Path = CONFIG_FILE) -> dict:
     if not config_file.exists():
-        raise FileNotFoundError(f"{config_file} is missing — it lists the agents to start.")
-    with open(config_file, "rb") as f:
-        return tomllib.load(f)
+        raise FileNotFoundError(
+            f"{config_file} is missing. It lists which agents to start, on which "
+            f"ports, and where the external services live. It is tracked in git — "
+            f"if it is not in your checkout, you are on an older revision."
+        )
+    with open(config_file) as f:
+        return yaml.safe_load(f) or {}
 
 
 def load_agents(config_file: Path = CONFIG_FILE) -> list[AgentSpec]:
-    """Every agent in agents.toml, in file order."""
+    """Every agent in agents.yml, in file order."""
     entries = _load(config_file).get("agents", [])
     if not entries:
         raise ValueError(f"{config_file} lists no agents.")

@@ -50,14 +50,14 @@ are no module globals.
 
 ```
 launch.py            starts and supervises everything; --check reports readiness
-agents.toml          which agents exist, on which ports, and where services live
+agents.yml          which agents exist, on which ports, and where services live
 smoke_test.py        run both pipelines once, without broker/ASSUME/Chronos
 src/
   main.py            builds the Agent, starts it, mounts the FastAPI app
   agent.py           the Agent: profile, preferences, LLM, MQTT, jobs queue, worker
   api.py             all HTTP endpoints
   config.py          one place for all settings and secret-file loading
-  agents_config.py   reads agents.toml
+  agents_config.py   reads agents.yml
   prosumer.py        loading the prosumer's profile from disk
   forecasting.py     calling the Chronos forecasting service
   llm/               chat backends (Mistral / OpenAI / LM Studio / offline), prompt, tools
@@ -122,6 +122,34 @@ Check that first when the optimiser behaves oddly.
 
 Optional extras: `pip install -e '.[lmstudio]'` for the local LM Studio backend.
 
+### Configuration files
+
+Two kinds, and only the second is git-ignored:
+
+| file | tracked? | needed for |
+|---|---|---|
+| `agents.yml` | yes | which agents to start, their ports, where the services live |
+| `src/mas4te_mistral_api_key.yml` | no | the chat assistant — optional, see `LLM_BACKEND` |
+| `src/mas4te_restapi_key.yml` | no | **buyers only**: the POST that sends their schedule to the BRP API |
+| `src/mas4tecontroller_mqtt_credentials.yml` | no | only when `MQTT_ONLINE=1` (live Jülich broker) |
+
+Each git-ignored one has a template next to it. Copy and fill in:
+
+```bash
+cd src
+cp mas4te_mistral_api_key.example.yml mas4te_mistral_api_key.yml
+cp mas4te_restapi_key.example.yml     mas4te_restapi_key.yml
+```
+
+None of them stop an agent from starting: without the Mistral key the chat falls
+back to the offline backend, and the BRP key is only read at the last step of a
+buyer's clearing run. `python launch.py --check` reports which ones you have and
+which ones your configured agents actually need.
+
+`src/data/` (prosumer profiles, prices, forecasts) is git-ignored too but is not
+a config file — it is a dataset, and it has no template. Point `MAS4TE_DATA_DIR`
+at it if it lives outside the checkout.
+
 ### Check the pipelines without any services
 
 ```bash
@@ -148,12 +176,12 @@ services are present, and whether any agent port is already taken.
 ### Start
 
 ```bash
-python launch.py                       # every agent in agents.toml + the services
+python launch.py                       # every agent in agents.yml + the services
 python launch.py --no-services         # agents only (same as: cd src && python start_agents.py)
 python launch.py --agents B_01,S_01    # just these two
 ```
 
-`agents.toml` at the repo root is the single source of truth for which agents
+`agents.yml` at the repo root is the single source of truth for which agents
 exist, which port each one gets and where the external services live. Each agent
 gets its web UI on its own port (`http://localhost:8002` and up) and its output
 in `logs/<AGENT_ID>.log`. Ctrl-C stops the whole tree in order.

@@ -1,0 +1,8 @@
+# Copy to mas4te_restapi_key.yml and fill in the credentials.
+#
+# Needed by BUYERS only: it authenticates the POST that sends their rented
+# storage schedule to the BRP API (config.POWER_REQUEST_URL). Sellers never read
+# this file — they send their schedule to the battery over MQTT instead.
+api:
+  username: replace-me
+  password: replace-me

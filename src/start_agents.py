@@ -1,4 +1,4 @@
-"""Start every agent from agents.toml, without the external services.
+"""Start every agent from agents.yml, without the external services.
 
 Kept for the workflow the README describes (`python start_agents.py` from src/).
 It is a thin wrapper around launch.py so there is only one agent list and one

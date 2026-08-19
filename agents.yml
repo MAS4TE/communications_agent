@@ -1,0 +1,52 @@
+# Which agents the launcher starts, and where the services they need live.
+#
+#   python launch.py --check     see what is and isn't ready
+#   python launch.py             start everything listed here
+#
+# Each agent is one process: profile_id picks the prosumer profile from
+# src/data/, agent_id is its name on the MQTT market, port is its web UI.
+# Buyers (B_*) own no battery, sellers (S_*) do.
+
+agents:
+  - { profile_id: 3,   agent_id: B_01, port: 8002 }
+  - { profile_id: 152, agent_id: B_02, port: 8003 }
+  - { profile_id: 9,   agent_id: B_03, port: 8004 }
+  - { profile_id: 33,  agent_id: B_04, port: 8005 }
+  - { profile_id: 96,  agent_id: B_05, port: 8006 }
+  - { profile_id: 168, agent_id: B_06, port: 8007 }
+  - { profile_id: 18,  agent_id: B_07, port: 8008 }
+  - { profile_id: 84,  agent_id: S_01, port: 8009 }
+  - { profile_id: 92,  agent_id: S_02, port: 8010 }
+  - { profile_id: 87,  agent_id: S_03, port: 8011 }
+
+# The MQTT broker the agents and ASSUME share.
+broker:
+  host: localhost
+  port: 1883
+
+# External services. Paths are relative to this file; a service whose directory
+# does not exist is skipped with a warning instead of taking the launch down.
+# Set enabled: false for anything you start yourself.
+services:
+
+  chronos:
+    enabled: true
+    path: ../../chronos_forecaster
+    command: [-m, uvicorn, "src.main:app", --host, 127.0.0.1, --port, "8000"]
+    venv: venv
+    health_url: http://127.0.0.1:8000/docs
+
+  battery:
+    enabled: true
+    path: ../../mas4te_battery/battery_simulation
+    command: [main_api_mqtt.py]
+    venv: venv
+
+  assume:
+    enabled: true
+    path: ../../assume
+    command: [mas4te/simulation.py]
+    venv: .assume-venv
+    # ASSUME drives the market clock, so it starts last — after the agents are
+    # up and subscribed, otherwise they miss the first market_open.
+    start_after_agents: true

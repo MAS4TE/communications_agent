@@ -1,0 +1,6 @@
+# Copy to mas4te_mistral_api_key.yml and fill in the key.
+#
+# Optional. Without it the chat assistant runs on the offline backend, which
+# answers from the agent's own data instead of from a language model. Trading is
+# unaffected either way. MISTRAL_API_KEY in the environment wins over this file.
+mistral_api_key: sk-replace-me

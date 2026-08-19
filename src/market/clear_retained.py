@@ -5,7 +5,7 @@ freshly started agent immediately receives the *last* market_open message and
 bids for a window that is already over. Run this between simulation runs to wipe
 those retained messages:
 
-    python -m market.clear_retained            # the agents from agents.toml
+    python -m market.clear_retained            # the agents from agents.yml
     python -m market.clear_retained B_01 S_01  # or an explicit list
 """
 import sys

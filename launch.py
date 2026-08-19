@@ -1,12 +1,12 @@
 """Start the whole MAS4TE stack: the external services and every agent.
 
     python launch.py --check      report what is ready and what is missing
-    python launch.py              start everything in agents.toml and supervise it
+    python launch.py              start everything in agents.yml and supervise it
     python launch.py --agents B_01,S_01 --no-services
     python launch.py --only-agents
 
 Which agents run, and where the services they depend on live, is configured in
-agents.toml — not in this file.
+agents.yml — not in this file.
 
 Replaces the old Windows-only launcher (CREATE_NEW_CONSOLE, cmd /k,
 venv/Scripts/*.exe): processes are started head-less on every platform, their
@@ -150,6 +150,10 @@ def wait_for(check, timeout: float, interval: float = 0.5) -> bool:
     return False
 
 
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
+
+
 def _installed_from(dist) -> str:
     """Where a distribution was installed from, per PEP 610 direct_url.json."""
     import json
@@ -258,17 +262,33 @@ def preflight(agents: list[AgentSpec], services: list[ServiceSpec]) -> bool:
         print(f"  NOT reachable at {host}:{port} — agents will start and keep retrying")
         print("  fix: start an MQTT broker, e.g. `mosquitto -p 1883`")
 
-    print("\nLLM")
+    print("\nCredentials")
     if os.environ.get("MISTRAL_API_KEY") or (SRC / "mas4te_mistral_api_key.yml").exists():
-        print("  Mistral key found — chat assistant enabled")
+        print("  mistral   found — chat assistant enabled")
     else:
-        print("  no API key — chat falls back to the offline backend (trading is unaffected)")
-        print("  fix: create src/mas4te_mistral_api_key.yml with `mistral_api_key: ...`")
+        print("  mistral   missing — chat falls back to the offline backend (trading is unaffected)")
+
+    if (SRC / "mas4te_restapi_key.yml").exists():
+        print("  brp api   found — buyers can send their schedule")
+    elif any(not agent.agent_id.startswith("S") for agent in agents):
+        print("  brp api   MISSING — buyers will fail at the last clearing step")
+    else:
+        print("  brp api   missing — not needed, no buyers configured")
+
+    if not _env_flag("MQTT_ONLINE"):
+        print("  battery   not needed — MQTT_ONLINE is off (local broker)")
+    elif (SRC / "mas4tecontroller_mqtt_credentials.yml").exists():
+        print("  battery   found — live broker credentials present")
+    else:
+        ok = False
+        print("  battery   MISSING — MQTT_ONLINE is on but there are no credentials")
+
+    print("  templates for all three: src/*.example.yml")
 
     print("\nExternal services")
     for service in services:
         if not service.enabled:
-            print(f"  {service.name:9} disabled in agents.toml")
+            print(f"  {service.name:9} disabled in agents.yml")
         elif service.available:
             print(f"  {service.name:9} found at {service.path}")
         else:
@@ -290,7 +310,7 @@ def preflight(agents: list[AgentSpec], services: list[ServiceSpec]) -> bool:
 # --------------------------------------------------------------------------
 def start_service(service: ServiceSpec) -> Child | None:
     if not service.enabled:
-        print(f"SKIP  {service.name}: disabled in agents.toml")
+        print(f"SKIP  {service.name}: disabled in agents.yml")
         return None
     if not service.available:
         print(f"SKIP  {service.name}: {service.path} does not exist")
@@ -318,7 +338,7 @@ def start_agent(agent: AgentSpec) -> Child:
     env = {
         "PROFILE_ID": str(agent.profile_id),
         "AGENT_ID": agent.agent_id,
-        # agents.toml is the single source of truth for the broker, so config.py
+        # agents.yml is the single source of truth for the broker, so config.py
         # picks it up from here rather than from its own default.
         "MQTT_LOCAL_BROKER": broker_host,
         "MQTT_LOCAL_PORT": str(broker_port),
@@ -391,7 +411,7 @@ def main() -> int:
     parser.add_argument("--check", action="store_true",
                         help="only report what is ready and what is missing")
     parser.add_argument("--agents", default=None,
-                        help="comma-separated agent ids to start (default: all of agents.toml)")
+                        help="comma-separated agent ids to start (default: all of agents.yml)")
     parser.add_argument("--no-services", "--only-agents", dest="no_services",
                         action="store_true", help="do not start Chronos, battery or ASSUME")
     parser.add_argument("--force", action="store_true",
