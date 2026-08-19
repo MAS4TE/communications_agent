@@ -80,27 +80,47 @@ wrapper module in between.
 
 ### Setup (once)
 
-`battery-utility-calculator` is **not on PyPI**. It has to come from the sibling
-checkout `../battery-utility-calculator`, and installing it any other way is how
-a stale copy ends up in the venv.
-
-```bash
-uv venv && uv pip install -e .          # uv resolves it via [tool.uv.sources]
-```
-
-With plain pip the local checkout must be installed first, or pip will go
-looking elsewhere for it:
+`battery-utility-calculator` is **not on PyPI**, so `pyproject.toml` points at
+its public git repo. Nothing else is needed — no local checkout of the optimiser,
+same command on every platform:
 
 ```bash
 python -m venv .venv
-.venv/bin/pip install -e ../battery-utility-calculator   # Windows: .venv\Scripts\pip
-.venv/bin/pip install -e .
+.venv/bin/pip install -e .          # Windows: .venv\Scripts\pip install -e .
 ```
 
-`python launch.py --check` prints which BUC is installed, from where, and on
-which git branch — check that first when the optimiser behaves oddly.
+or, with uv:
 
-Optional extras: `uv pip install -e '.[lmstudio]'` for the local LM Studio backend.
+```bash
+uv venv && uv pip install -e .
+```
+
+The pin follows the `main` branch. That is deliberately the only way the
+optimiser gets installed: an earlier `[tool.uv.sources]` override silently
+replaced it with whatever branch a sibling checkout happened to be on, which is
+how a stale optimiser ends up in the venv. To hack on both repos at once,
+install the checkout over the pin explicitly and remember you have done so:
+
+```bash
+pip install -e ../battery-utility-calculator
+```
+
+A branch pin is not reproducible — the next commit on `main` silently changes
+your install. For a frozen build, pin the commit instead:
+`...battery-utility-calculator@12d9c94a`.
+
+`python launch.py --check` prints which optimiser is installed and where it came
+from, so you can see at a glance which of the two you have:
+
+```
+Battery Utility Calculator
+  version 0.3.0
+  pinned to https://github.com/MAS4TE/battery-utility-calculator @ main (12d9c94a)
+```
+
+Check that first when the optimiser behaves oddly.
+
+Optional extras: `pip install -e '.[lmstudio]'` for the local LM Studio backend.
 
 ### Check the pipelines without any services
 

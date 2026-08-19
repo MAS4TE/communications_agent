@@ -25,10 +25,9 @@ dependencies = [
     "pyyaml >=6.0",
     # chat backend (Mistral and OpenAI both speak this protocol)
     "openai >=1.30",
-    # The optimiser. NOT on PyPI — it must come from the sibling checkout.
-    # uv resolves it via [tool.uv.sources] below; with plain pip, install it
-    # first:  pip install -e ../battery-utility-calculator
-    "battery-utility-calculator >=0.3.0",
+    # The optimiser. Not on PyPI, so it comes from its public git repo and plain
+    # `pip install -e .` resolves it without any local checkout.
+    "battery-utility-calculator @ git+https://github.com/MAS4TE/battery-utility-calculator@main",
 ]
 
 [project.optional-dependencies]
@@ -44,7 +43,3 @@ py-modules = ["launch"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
-
-# battery-utility-calculator is not on PyPI — resolve it from the sibling checkout.
-[tool.uv.sources]
-battery-utility-calculator = { path = "../battery-utility-calculator", editable = true }

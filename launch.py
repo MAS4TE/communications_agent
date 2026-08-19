@@ -150,6 +150,27 @@ def wait_for(check, timeout: float, interval: float = 0.5) -> bool:
     return False
 
 
+def _installed_from(dist) -> str:
+    """Where a distribution was installed from, per PEP 610 direct_url.json."""
+    import json
+
+    raw = dist.read_text("direct_url.json")
+    if raw is None:
+        return "installed from an index or an unknown source — expected a git pin "\
+               "or an editable checkout; reinstall with `pip install -e .`"
+
+    info = json.loads(raw)
+    url = info.get("url", "?")
+    if "vcs_info" in info:
+        vcs = info["vcs_info"]
+        revision = vcs.get("requested_revision", "?")
+        commit = (vcs.get("commit_id") or "")[:8]
+        return f"pinned to {url} @ {revision} ({commit})"
+    if info.get("dir_info", {}).get("editable"):
+        return f"editable checkout at {url}"
+    return f"installed from {url}"
+
+
 def service_python(service: ServiceSpec) -> str:
     """The interpreter a service should run under: its own venv, or ours."""
     if service.venv:
@@ -189,25 +210,17 @@ def preflight(agents: list[AgentSpec], services: list[ServiceSpec]) -> bool:
     print("\nBattery Utility Calculator")
     try:
         import battery_utility_calculator as buc
-        from importlib.metadata import version
+        from importlib.metadata import distribution, version
 
-        location = Path(buc.__file__).resolve().parent.parent
-        print(f"  version {version('battery-utility-calculator')} from {location}")
-        if (location / ".git").is_dir():
-            import subprocess as sp
-
-            branch = sp.run(["git", "-C", str(location), "rev-parse", "--abbrev-ref", "HEAD"],
-                            capture_output=True, text=True).stdout.strip()
-            head = sp.run(["git", "-C", str(location), "log", "-1", "--format=%h %s"],
-                          capture_output=True, text=True).stdout.strip()
-            print(f"  git: branch {branch}, {head}")
-        else:
-            print("  WARNING: not an editable checkout — this is how a stale copy sneaks in.")
-            print("  fix: pip install -e ../battery-utility-calculator")
+        print(f"  version {version('battery-utility-calculator')}")
+        # PEP 610: pip and uv record where a package actually came from.
+        origin = _installed_from(distribution("battery-utility-calculator"))
+        print(f"  {origin}")
+        print(f"  imported from {Path(buc.__file__).resolve().parent}")
     except ImportError:
         ok = False
         print("  NOT INSTALLED")
-        print("  fix: pip install -e ../battery-utility-calculator")
+        print("  fix: pip install -e .")
 
     print("\nProsumer data")
     from config import DATA_DIR                    # noqa: PLC0415  (honours MAS4TE_DATA_DIR)
