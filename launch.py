@@ -378,6 +378,13 @@ def preflight(agents: list[AgentSpec], services: list[ServiceSpec]) -> bool:
     return ok
 
 
+# -------------------------------------------------------------------------
+# Ensure proper closing of previous run
+# -------------------------------------------------------------------------
+def clear_retained_status() -> None:
+    """Clear leftover retained MQTT messages before starting (see clear_retained.py)."""
+    subprocess.run([sys.executable, str(SRC / "market/clear_retained.py")], cwd=SRC)
+
 # --------------------------------------------------------------------------
 # Starting things
 # --------------------------------------------------------------------------
@@ -532,6 +539,8 @@ def main() -> int:
     print("\n" + "-" * 70)
     children: list[Child] = []
     try:
+        clear_retained_status()
+
         for service in services:
             if not service.start_after_agents:
                 child = start_service(service, terminal=args.terminals)

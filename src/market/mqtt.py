@@ -77,8 +77,11 @@ class MarketClient:
 
         # Queue the work and return — see the comment at the top of agent.py.
         if message.topic == self.topic_status and payload.get("status") == "market_open":
-            log.info("receive topic=%s status=market_open products=%d -> queue bidding",
-                     message.topic, len(payload.get("products", [])))
+            products = payload.get("products", [])
+            windows = [(p.get("start_time"), p.get("end_time")) for p in products]
+            log.info("receive topic=%s dup=%s mid=%s status=market_open", message.topic, message.dup, message.mid)
+            log.info("receive topic=%s status=market_open products=%d windows=%s -> queue bidding",
+                    message.topic, len(products), windows)
             self.agent.on_market_open(payload)
         elif message.topic == self.topic_results and payload.get("msg") == "market result":
             log.info("receive topic=%s msg=market_result orders=%d -> queue clearing",

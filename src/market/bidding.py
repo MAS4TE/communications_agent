@@ -140,6 +140,7 @@ def retrieve_market_info(ctx: MarketContext):
     if start.tzinfo is not None:
         start, end = start.tz_convert(None), end.tz_convert(None)
     ctx.data["window"] = {"start": start, "end": end}
+    log.info("market window: %s -> %s", start, end)
     ctx.log("retrieve_market_info", "Extracted the trading window from the market event.",
             {"window_start": str(start), "window_end": str(end)})
 
@@ -186,6 +187,9 @@ def forecast_prices(ctx: MarketContext):
             DATA_DIR / f"prices_{country}_{col}_forecasted.csv",
             prices_csv, col, window["start"], window["end"],
         )
+        print(DATA_DIR / f"prices_{country}_{col}_forecasted.csv")
+        print(col)
+        print(prices[col])
     ctx.data["prices_fc"] = prices
     ctx.log("forecast_prices", f"Forecast {len(price_columns)} energy price streams for {country}.",
             {"columns": price_columns, "country": country})
