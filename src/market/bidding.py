@@ -22,9 +22,12 @@ from battery_utility_calculator import (
     calculate_bidding_curve,
     calculate_multiple_storage_worth,
     calculate_multiple_storage_worth_by_location,
+    calculate_risk_adjusted_bidding_curve, 
+    calculate_storage_worth_distribution, 
+    sample_scenarios,
 )
 
-from config import DATA_DIR, DEFAULT_COUNTRY, DRY_RUN, LOCATION_COUNTRY, SELLER_LOCATIONS, SOLVER
+from config import DATA_DIR, DEFAULT_COUNTRY, DRY_RUN, LOCATION_COUNTRY, SELLER_LOCATIONS, SOLVER, RISK_BIDDING_ENABLED
 from forecasting import chronos_forecast
 from market.pipeline import MarketContext, run_pipeline
 from prosumer import load_profile_metadata
@@ -35,6 +38,9 @@ PRICES_CSV = DATA_DIR / "profile_data" / "prices.csv"
 
 # Every candidate storage is offered at this C-rate (kW per kWh of capacity).
 C_RATE = 0.2
+N_SCENARIOS = 12 # amount of scenarios that the BUC computes
+SCENARIO_SEED = 42 # set an int if you want reproducible runs
+RISK_TOLERANCE_LEVELS = {"Low": 0.05, "Medium": 0.35, "High": 0.50}
 
 
 # --------------------------------------------------------------------------
@@ -65,17 +71,51 @@ def _summarise(name: str, series) -> str:
 
 
 def _cached_forecast(cache_path, csv_path, value_col, start, end) -> pd.Series:
-    """Use a pre-computed forecast CSV if it exists, otherwise call Chronos."""
-    if cache_path.exists():
-        series = pd.read_csv(cache_path, index_col=0, parse_dates=True).iloc[:, 0]
-        if getattr(series.index, "tz", None) is not None:
-            series.index = series.index.tz_localize(None)
-        return series[(series.index >= start) & (series.index < end)]
+    """Use a pre-computed forecast CSV if it exists, otherwise call Chronos.
 
-    series = chronos_forecast(str(csv_path), start, end, value_col=value_col)
+    Appends each newly-forecasted window to the cache file instead of
+    overwriting it, so the file grows week by week and ends up covering
+    the full run once every week has been through here.
+    """
+    cached = None
+    if cache_path.exists():
+        cached = pd.read_csv(cache_path, index_col=0, parse_dates=True).iloc[:, 0]
+        if getattr(cached.index, "tz", None) is not None:
+            cached.index = cached.index.tz_localize(None)
+
+        already_covered = cached[(cached.index >= start) & (cached.index < end)]
+        if len(already_covered) > 0:
+            return already_covered          # this window is already cached
+
+    # This window is missing -- ask Chronos for just this window.
+    fresh = chronos_forecast(str(csv_path), start, end, value_col=value_col)
+    if getattr(fresh.index, "tz", None) is not None:
+        fresh.index = fresh.index.tz_localize(None)
+
+    combined = pd.concat([cached, fresh]) if cached is not None else fresh
+    combined = combined[~combined.index.duplicated(keep="last")].sort_index()
+
     cache_path.parent.mkdir(parents=True, exist_ok=True)
-    series.to_frame(name=value_col).to_csv(cache_path)
-    return series
+    combined.to_frame(name=value_col).to_csv(cache_path)
+
+    return fresh
+
+def _worth_distribution_by_location(baseline_storage, storages_to_calculate, locations, scenarios, my_location, goal):
+    rows = [
+        calculate_storage_worth_distribution(
+            baseline_storage=baseline_storage,
+            storages_to_calculate=storages_to_calculate,
+            scenarios=scenarios,
+            my_location=my_location,
+            storage_location=location,
+            is_rented_storage=True,
+            goal=goal,
+            solver=SOLVER,
+        )
+        for location in locations
+    ]
+    df = pd.concat(rows, ignore_index=True)
+    return df[~((df["location"] != my_location) & (df["volume"] == baseline_storage.volume))].reset_index(drop=True)
 
 
 def locations_in_scope(trading_scope: str, my_location: str) -> list[str]:
@@ -245,66 +285,101 @@ Respond with JSON only — no markdown:
 def battery_utility(ctx: MarketContext):
     """Ask the Battery Utility Calculator what each storage size is worth.
 
-    One solve per candidate volume, and for buyers one such sweep per location,
-    so the work here is (locations x volumes) linear programs. Both BUC entry
-    points are called directly below — what you read is what runs.
+    Risk-adjusted by default. Green skips the risk step entirely — it isn't
+    optimizing for price, so a price-risk score has nothing to adjust for.
     """
     preferences = ctx.data["preferences"]
     battery_kwh = ctx.data["storage_size_kwh"]
     is_buyer = battery_kwh <= 0
     my_location = ctx.data.get("location", "aachen").lower()
-    goal = "max_green_energy" if preferences.get("trading_preference") == "Green" else "max_cashflow"
+    trading_preference = preferences.get("trading_preference", "Profit")
+    goal = "max_green_energy" if trading_preference == "Green" else "max_cashflow"
+    use_risk = trading_preference != "Green" and config.RISK_BIDDING_ENABLED
 
     series = forecast_inputs(ctx)
     community = series.pop("community")
+    charge_series = {}
 
     if is_buyer:
-        # Buyers rent storage that physically sits somewhere else, so the sweep
-        # runs once per location they are allowed to trade with.
         max_volume = ctx.data.get("max_volume", 10)
         volumes = range(1, max_volume + 1)
         locations = locations_in_scope(preferences.get("trading_scope", "All"), my_location)
         max_tradeable = None
 
-        # NOTE: this entry point returns a plain DataFrame and drops the charge
-        # timeseries, so buyers never get a cached schedule — clearing.py
-        # recomputes it for the volume that was actually accepted.
-        results_df = calculate_multiple_storage_worth_by_location(
-            baseline_storage=Storage(id=0, c_rate=C_RATE, volume=battery_kwh),
-            storages_to_calculate=[Storage(id=v, c_rate=C_RATE, volume=v) for v in volumes],
-            locations_to_calculate=locations,
-            community_market_prices={location: community for location in locations},
-            my_location=my_location,
-            goal=goal,
-            solver=SOLVER,
-            **series,
-        )
-        charge_series = {}
+        if use_risk:
+            scenarios = sample_scenarios(
+                **series,
+                community_market_prices={location: community for location in locations},
+                n_scenarios=N_SCENARIOS,
+                seed=SCENARIO_SEED,
+            )
+            worth_distribution = _worth_distribution_by_location(
+                baseline_storage=Storage(id=0, c_rate=C_RATE, volume=battery_kwh),
+                storages_to_calculate=[Storage(id=v, c_rate=C_RATE, volume=v) for v in volumes],
+                locations=locations,
+                scenarios=scenarios,
+                my_location=my_location,
+                goal=goal,
+            )
+        else:
+            results_df = calculate_multiple_storage_worth_by_location(
+                baseline_storage=Storage(id=0, c_rate=C_RATE, volume=battery_kwh),
+                storages_to_calculate=[Storage(id=v, c_rate=C_RATE, volume=v) for v in volumes],
+                locations_to_calculate=locations,
+                community_market_prices={location: community for location in locations},
+                my_location=my_location,
+                goal=goal,
+                solver=SOLVER,
+                **series,
+            )
     else:
-        # Sellers own the battery, so the sweep is over their own capacity and
-        # the cap is how much of it they are willing to rent out.
         volumes = range(1, int(battery_kwh) + 1)
         max_tradeable = int(battery_kwh * preferences.get("battery_tradeable_pct", 50) / 100)
 
-        result = calculate_multiple_storage_worth(
-            baseline_storage=Storage(id=int(battery_kwh), c_rate=C_RATE, volume=battery_kwh),
-            storages_to_calculate=[Storage(id=v, c_rate=C_RATE, volume=v) for v in volumes],
-            community_market_prices={my_location: community},
-            my_location=my_location,
-            is_rented_storage=False,
-            goal=goal,
-            solver=SOLVER,
-            return_charge_timeseries=True,
-            **series,
-        )
-        results_df = result["results_df"]
-        charge_series = result.get("storages_to_calc_charge_ts", {})
+        if use_risk:
+            scenarios = sample_scenarios(
+                **series,
+                community_market_prices={my_location: community},
+                n_scenarios=N_SCENARIOS,
+                seed=SCENARIO_SEED,
+            )
+            worth_distribution = calculate_storage_worth_distribution(
+                baseline_storage=Storage(id=int(battery_kwh), c_rate=C_RATE, volume=battery_kwh),
+                storages_to_calculate=[Storage(id=v, c_rate=C_RATE, volume=v) for v in volumes],
+                scenarios=scenarios,
+                my_location=my_location,
+                is_rented_storage=False,
+                goal=goal,
+                solver=SOLVER,
+            )
+        else:
+            result = calculate_multiple_storage_worth(
+                baseline_storage=Storage(id=int(battery_kwh), c_rate=C_RATE, volume=battery_kwh),
+                storages_to_calculate=[Storage(id=v, c_rate=C_RATE, volume=v) for v in volumes],
+                community_market_prices={my_location: community},
+                my_location=my_location,
+                is_rented_storage=False,
+                goal=goal,
+                solver=SOLVER,
+                return_charge_timeseries=True,
+                **series,
+            )
+            results_df = result["results_df"]
+            charge_series = result.get("storages_to_calc_charge_ts", {})
 
-    columns = ["volume", "worth"] + (["location"] if "location" in results_df.columns else [])
-    curve = calculate_bidding_curve(
-        volumes_worth=results_df[columns],
-        buy_or_sell_side="buyer" if is_buyer else "seller",
-    )
+    if use_risk:
+        curve = calculate_risk_adjusted_bidding_curve(
+            worth_distribution=worth_distribution,
+            buy_or_sell_side="buyer" if is_buyer else "seller",
+            risk_level=RISK_TOLERANCE_LEVELS[preferences.get("risk_tolerance", "Low")],
+        )
+    else:
+        columns = ["volume", "worth"] + (["location"] if "location" in results_df.columns else [])
+        curve = calculate_bidding_curve(
+            volumes_worth=results_df[columns],
+            buy_or_sell_side="buyer" if is_buyer else "seller",
+        )
+
     if max_tradeable is not None:
         curve = curve.head(max_tradeable)
 
@@ -315,7 +390,7 @@ def battery_utility(ctx: MarketContext):
         "Ran the Battery Utility Calculator to decide how much storage to bid for and at what price.",
         {
             "role": "buyer" if is_buyer else "seller",
-            "solves": len(volumes) * (len(locations) if is_buyer else 1),
+            "risk_adjusted": use_risk,
             "bid_steps": len(curve),
             "total_volume_kwh": round(float(curve["cumulative_volume"].max()), 2),
             "price_range_eur_kwh": [

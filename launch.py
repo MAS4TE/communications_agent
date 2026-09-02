@@ -419,7 +419,7 @@ def start_service(service: ServiceSpec, terminal: bool = False) -> Child | None:
     return child
 
 
-def start_agent(agent: AgentSpec, terminal: bool = False) -> Child:
+def start_agent(agent: AgentSpec, terminal: bool = False, risk_bidding: bool = True) -> Child:
     command = [
         sys.executable, "-m", "uvicorn", "main:app",
         "--host", "127.0.0.1", "--port", str(agent.port),
@@ -432,6 +432,7 @@ def start_agent(agent: AgentSpec, terminal: bool = False) -> Child:
         # picks it up from here rather than from its own default.
         "MQTT_LOCAL_BROKER": broker_host,
         "MQTT_LOCAL_PORT": str(broker_port),
+        "RISK_BIDDING_ENABLED": "true" if risk_bidding else "false",
     }
     child = _spawn(agent.agent_id, command, cwd=SRC, env=env, terminal=terminal)
     print(f"START {agent.agent_id:6} profile {agent.profile_id:<4} "
@@ -510,6 +511,8 @@ def main() -> int:
                              "writes logs/<AGENT_ID>.log)")
     parser.add_argument("--force", action="store_true",
                         help="start even if the preflight check fails")
+    parser.add_argument("--no-risk", action="store_true", 
+                        help="disable risk-adjusted bidding for all agents (deterministic BUC only)")
     args = parser.parse_args()
 
     agents = load_agents()
@@ -548,7 +551,8 @@ def main() -> int:
                     children.append(child)
 
         for agent in agents:
-            children.append(start_agent(agent, terminal=args.terminals))
+            # children.append(start_agent(agent, terminal=args.terminals))
+            children.append(start_agent(agent, terminal=args.terminals, risk_bidding=not args.no_risk))
 
         print("\nWaiting for the agents to come up...")
         wait_for_agents(agents, children)

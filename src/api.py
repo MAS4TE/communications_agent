@@ -35,6 +35,7 @@ class PreferencesRequest(BaseModel):
     battery_tradeable_pct: int
     expertise: str
     trading_scope: str
+    risk_tolerance: str
 
 
 @router.get("/")
@@ -65,6 +66,7 @@ def save_preferences(body: PreferencesRequest, request: Request):
         battery_tradeable_pct=body.battery_tradeable_pct,
         expertise=body.expertise,
         trading_scope=body.trading_scope,
+        risk_tolerance=body.risk_tolerance,
     )
     return {"status": "ok"}
 

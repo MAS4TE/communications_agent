@@ -126,10 +126,11 @@ class Agent:
         fresh_context = {
             "role": "system",
             "content": (
-                f"IMPORTANT: The prosumer's current preferences RIGHT NOW are: "
                 f"trading_preference={prefs.get('trading_preference', 'Profit')}, "
-                f"expertise={prefs.get('expertise', 'Beginner')}. These are the latest values — "
-                f"ignore any earlier preference values in this conversation. {role_context}"
+                f"expertise={prefs.get('expertise', 'Beginner')}, "
+                f"trading_scope={prefs.get('trading_scope', 'All')}, "
+                f"risk_tolerance={prefs.get('risk_tolerance', 'Low')} (ignored when trading_preference is Green). "
+                f"These are the latest values — ignore any earlier preference values in this conversation. {role_context}"
             ),
         }
 

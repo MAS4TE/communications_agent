@@ -31,6 +31,7 @@ DEFAULT_PREFERENCES = {
     "battery_tradeable_pct": 80,        # how much of the battery may be rented out
     "expertise": "Beginner",            # "Beginner" / "Intermediate" / "Expert"
     "trading_scope": "All",             # "Community" / "Country" / "All"
+    "risk_tolerance": "Low",            # "Low" / "Medium" / "High"
 }
 
 
