@@ -145,6 +145,35 @@ def forecast_inputs(ctx: MarketContext) -> dict:
         "community": _to_series(prices.get("community")).reindex(index, method="nearest"),
     }
 
+def build_bid_summary(ctx: MarketContext) -> dict:
+    """Plain-language numbers for the summary card — no trace, no jargon."""
+    curve = ctx.data.get("bidding_curve")
+    if curve is None or curve.empty:
+        return {"traded": False}
+
+    is_seller = ctx.data["storage_size_kwh"] > 0
+    total_volume = float(curve["cumulative_volume"].max())
+    avg_price = float((curve["marginal_price_per_kwh"] * curve["volume"]).sum() / curve["volume"].sum())
+    battery_kept_pct = None
+    if is_seller:
+        battery_kept_pct = 100 - ctx.data["preferences"].get("battery_tradeable_pct", 50)
+
+    print('build bid summary: ', {
+        "traded": True,
+        "role": "seller" if is_seller else "buyer",
+        "volume_kwh": round(total_volume, 1),
+        "avg_price_per_kwh": round(avg_price, 3),
+        "battery_kept_pct": battery_kept_pct,
+    }
+    )
+
+    return {
+        "traded": True,
+        "role": "seller" if is_seller else "buyer",
+        "volume_kwh": round(total_volume, 1),
+        "avg_price_per_kwh": round(avg_price, 3),
+        "battery_kept_pct": battery_kept_pct,
+    }
 
 # --------------------------------------------------------------------------
 # Steps
@@ -180,6 +209,7 @@ def retrieve_market_info(ctx: MarketContext):
     if start.tzinfo is not None:
         start, end = start.tz_convert(None), end.tz_convert(None)
     ctx.data["window"] = {"start": start, "end": end}
+    ctx.agent.last_window = ctx.data["window"]
     log.info("market window: %s -> %s", start, end)
     ctx.log("retrieve_market_info", "Extracted the trading window from the market event.",
             {"window_start": str(start), "window_end": str(end)})
@@ -294,7 +324,7 @@ def battery_utility(ctx: MarketContext):
     my_location = ctx.data.get("location", "aachen").lower()
     trading_preference = preferences.get("trading_preference", "Profit")
     goal = "max_green_energy" if trading_preference == "Green" else "max_cashflow"
-    use_risk = trading_preference != "Green" and config.RISK_BIDDING_ENABLED
+    use_risk = trading_preference != "Green" and RISK_BIDDING_ENABLED
 
     series = forecast_inputs(ctx)
     community = series.pop("community")
@@ -460,4 +490,5 @@ def run_bidding(agent, market_data: dict) -> MarketContext:
     # so the chat assistant can explain the bid.
     agent.last_bidding_data = ctx.data
     agent.last_bid_trace = ctx.trace
+    agent.last_bid_summary = build_bid_summary(ctx)
     return ctx

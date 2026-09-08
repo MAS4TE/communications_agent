@@ -4,19 +4,25 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MAS4TE Assistant</title>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
     :root {
-      --primary: #10a37f;
-      --primary-dark: #0a8f6d;
-      --primary-light: rgba(16, 163, 127, 0.12);
-      --text: #1a1a2e;
-      --text-muted: #6e7191;
-      --bg: #f8f9fc;
-      --surface: #ffffff;
-      --border: #e4e7f0;
-      --user-bubble: #10a37f;
-      --panel-width: 280px;
+      --primary: #39e07a;
+      --primary-dark: #2bc766;
+      --primary-glow: rgba(57, 224, 122, 0.18);
+      --primary-glow-strong: rgba(57, 224, 122, 0.35);
+      --text: #eef1f0;
+      --text-muted: #8a938f;
+      --text-faint: #5b6560;
+      --bg: #0d1210;
+      --surface: #141a17;
+      --surface-2: #1a2119;
+      --border: #262e29;
+      --border-strong: #34403a;
+      --danger: #ef4444;
+      --amber: #f5a623;
+      --blue: #4a90e2;
+      --panel-width: 300px;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -34,34 +40,169 @@
     /* ── HEADER ── */
     header {
       display: flex; align-items: center; justify-content: space-between;
-      padding: 14px 24px; background: var(--surface);
+      padding: 12px 24px; background: var(--surface);
       border-bottom: 1px solid var(--border); z-index: 10; flex-shrink: 0;
     }
     .header-left { display: flex; align-items: center; gap: 14px; }
-    .header-left img { height: 180px; }
-    .header-title { font-size: 1.1rem; font-weight: 600; color: var(--primary); letter-spacing: -0.3px; }
+    .header-left img {
+      height: 120px;
+      background: #ffffff;
+      padding: 8px 14px;
+      border-radius: 8px;
+    }
+    .header-title { font-size: 1.05rem; font-weight: 700; color: var(--primary); letter-spacing: -0.3px; }
     .header-subtitle { font-size: 0.72rem; color: var(--text-muted); margin-top: 1px; }
-    .battery-pill {
-      display: flex; align-items: center; gap: 6px;
-      background: var(--bg); border: 1px solid var(--border);
-      padding: 5px 12px; border-radius: 20px;
-      font-size: 0.82rem; font-weight: 500; color: var(--text-muted);
+    .header-status {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 0.78rem; color: var(--text-muted);
+      background: var(--surface-2); border: 1px solid var(--border);
+      padding: 6px 14px; border-radius: 20px;
+    }
+    .status-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--primary); box-shadow: 0 0 8px var(--primary-glow-strong);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
     }
 
     /* ── LAYOUT ── */
     .main-layout { display: flex; flex: 1; overflow: hidden; }
-
-    /* ── CHAT ── */
-    .chat-area {
+    .chat-column {
       flex: 1; display: flex; flex-direction: column;
       overflow: hidden; margin-right: var(--panel-width);
     }
+
+    /* ── DASHBOARD ROW ── */
+    #dashboard-row {
+      display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;
+      padding: 16px 24px 0; background: var(--surface);
+      flex-shrink: 0;
+    }
+    .stat-card {
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: 12px; padding: 14px 16px;
+      display: flex; flex-direction: column; gap: 6px;
+      transition: border-color 0.2s;
+    }
+    .stat-card:hover { border-color: var(--border-strong); }
+    .stat-card-label {
+      font-size: 0.68rem; font-weight: 600; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.06em;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .stat-card-value {
+      font-size: 1.3rem; font-weight: 700; font-family: 'DM Mono', monospace;
+      color: var(--text);
+    }
+    .stat-card-value.accent { color: var(--primary); }
+    .stat-card-sub { font-size: 0.72rem; color: var(--text-faint); }
+
+    /* TODO cards — no real data source wired yet */
+    .stat-card.todo {
+      border-style: dashed; border-color: var(--border-strong);
+      opacity: 0.7;
+    }
+    .todo-pill {
+      font-size: 0.6rem; font-weight: 700; letter-spacing: 0.05em;
+      color: var(--amber); background: rgba(245,166,35,0.12);
+      border: 1px solid rgba(245,166,35,0.3); border-radius: 20px;
+      padding: 1px 7px; margin-left: auto;
+    }
+
+    /* ── CYCLE STEPPER ── */
+    #cycle-stepper {
+      margin: 12px 24px 0; padding: 18px 22px;
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: 12px; flex-shrink: 0;
+    }
+    #cycle-stepper-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    #cycle-stepper-title {
+      font-size: 0.68rem; font-weight: 600; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .cycle-steps {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      position: relative;
+    }
+    .cycle-track-bg {
+      position: absolute; top: 11px; left: 22px; right: 22px;
+      height: 2px; background: var(--border); z-index: 0;
+    }
+    .cycle-track-fill {
+      position: absolute; top: 11px; left: 22px;
+      height: 2px; background: var(--primary); z-index: 0;
+      transition: width 0.4s ease;
+    }
+    .cycle-step {
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+      z-index: 1; flex: 1;
+    }
+    .cycle-step-dot {
+      width: 22px; height: 22px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700;
+      background: var(--surface-2); border: 2px solid var(--border);
+      color: var(--text-faint);
+      transition: background 0.3s, border-color 0.3s, color 0.3s;
+    }
+    .cycle-step-dot.done {
+      background: var(--primary); border-color: var(--primary); color: #06130a;
+    }
+    .cycle-step-dot.active {
+      background: var(--surface-2); border-color: var(--primary); color: var(--primary);
+      box-shadow: 0 0 0 4px var(--primary-glow);
+    }
+    .cycle-step-label {
+      font-size: 0.68rem; text-align: center; max-width: 72px;
+      color: var(--text-faint); transition: color 0.3s;
+    }
+    .cycle-step-label.done { color: var(--primary); }
+    .cycle-step-label.active { color: var(--text); font-weight: 600; }
+
+    /* mini bar for battery SoC */
+    .soc-bar-track {
+      height: 6px; background: var(--border); border-radius: 4px;
+      overflow: hidden; margin-top: 2px;
+    }
+    .soc-bar-fill {
+      height: 100%; background: linear-gradient(90deg, var(--primary-dark), var(--primary));
+      border-radius: 4px; transition: width 0.4s ease;
+    }
+
+    /* mini sparkline row */
+    .spark-legend {
+      display: flex; gap: 12px; font-size: 0.68rem; color: var(--text-muted);
+    }
+    .spark-legend span { display: flex; align-items: center; gap: 4px; }
+    .spark-dot { width: 7px; height: 7px; border-radius: 2px; }
+
+    /* trade summary banner */
+    #trade-summary-card {
+      display: none; margin: 16px 24px 0; padding: 12px 16px;
+      background: var(--surface-2); border: 1px solid var(--primary);
+      border-radius: 10px; font-size: 0.86rem; color: var(--text);
+      display: flex; align-items: center; gap: 10px;
+    }
+    #trade-summary-card .trade-icon {
+      width: 26px; height: 26px; border-radius: 50%;
+      background: var(--primary-glow); color: var(--primary);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.85rem; flex-shrink: 0;
+    }
+
+    /* ── CHAT ── */
     #chat-box {
-      flex: 1; overflow-y: auto; padding: 24px 28px;
+      flex: 1; overflow-y: auto; padding: 20px 24px;
       display: flex; flex-direction: column; gap: 10px;
     }
     .message {
-      padding: 12px 16px; border-radius: 14px; max-width: 78%;
+      padding: 12px 16px; border-radius: 14px; max-width: 74%;
       word-wrap: break-word; font-size: 0.92rem; line-height: 1.6;
       animation: msgIn 0.2s ease;
     }
@@ -70,11 +211,11 @@
       to   { opacity: 1; transform: translateY(0); }
     }
     .user-message {
-      background: var(--user-bubble); color: white;
+      background: var(--primary); color: #06130a; font-weight: 500;
       align-self: flex-end; border-bottom-right-radius: 4px;
     }
     .assistant-message {
-      background: var(--surface); border: 1px solid var(--border);
+      background: var(--surface-2); border: 1px solid var(--border);
       align-self: flex-start; border-bottom-left-radius: 4px;
     }
     .input-area {
@@ -85,16 +226,17 @@
       flex: 1; padding: 11px 16px; border-radius: 10px;
       border: 1px solid var(--border); font-size: 0.92rem;
       font-family: 'DM Sans', sans-serif; outline: none;
-      background: var(--bg); color: var(--text);
+      background: var(--surface-2); color: var(--text);
       transition: border-color 0.2s, box-shadow 0.2s;
     }
+    #user-input::placeholder { color: var(--text-faint); }
     #user-input:focus {
       border-color: var(--primary);
-      box-shadow: 0 0 0 3px rgba(16,163,127,0.15); background: #fff;
+      box-shadow: 0 0 0 3px var(--primary-glow);
     }
     #send-btn {
-      padding: 11px 20px; background: var(--primary); color: white;
-      border: none; border-radius: 10px; font-size: 0.92rem; font-weight: 600;
+      padding: 11px 22px; background: var(--primary); color: #06130a;
+      border: none; border-radius: 10px; font-size: 0.9rem; font-weight: 700;
       font-family: 'DM Sans', sans-serif; cursor: pointer;
       transition: background 0.2s, transform 0.1s;
     }
@@ -106,15 +248,14 @@
       width: var(--panel-width); height: 100vh;
       background: var(--surface); border-left: 1px solid var(--border);
       z-index: 100; display: flex; flex-direction: column;
-      box-shadow: -4px 0 20px rgba(0,0,0,0.05);
+      box-shadow: -8px 0 24px rgba(0,0,0,0.35);
     }
 
-    /* ── TABS ── */
     .panel-tabs { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; }
     .panel-tab {
       flex: 1; padding: 14px 0; background: none; border: none;
       border-bottom: 2px solid transparent; margin-bottom: -1px;
-      font-family: 'DM Sans', sans-serif; font-size: 0.82rem; font-weight: 600;
+      font-family: 'DM Sans', sans-serif; font-size: 0.8rem; font-weight: 600;
       color: var(--text-muted); cursor: pointer; transition: color 0.2s, border-color 0.2s;
     }
     .panel-tab:hover { color: var(--text); }
@@ -123,12 +264,12 @@
     .tab-content { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
     .panel-body {
       padding: 22px 20px; display: flex; flex-direction: column;
-      gap: 28px; flex: 1; overflow-y: auto;
+      gap: 26px; flex: 1; overflow-y: auto;
     }
 
     /* ── SLIDERS ── */
     .pref-section label {
-      display: block; font-size: 0.75rem; font-weight: 600;
+      display: block; font-size: 0.72rem; font-weight: 600;
       color: var(--text-muted); letter-spacing: 0.06em;
       text-transform: uppercase; margin-bottom: 14px;
     }
@@ -139,6 +280,7 @@
     .step-fill {
       position: absolute; left: 0; top: 0; height: 100%;
       border-radius: 4px; transition: width 0.3s ease, background 0.3s ease;
+      background: var(--primary);
     }
     .step-dots {
       position: absolute; top: 50%; transform: translateY(-50%);
@@ -157,22 +299,19 @@
     }
     .step-labels { display: flex; justify-content: space-between; margin: 10px 10px 0; }
     .step-label {
-      font-size: 0.76rem; font-weight: 500; color: var(--text-muted);
+      font-size: 0.75rem; font-weight: 500; color: var(--text-muted);
       transition: color 0.2s; text-align: center; cursor: pointer;
     }
-    .step-label.active { font-weight: 700; }
+    .step-label.active { font-weight: 700; color: var(--primary); }
     .pref-summary {
-      padding: 10px 14px; background: var(--bg);
+      padding: 10px 14px; background: var(--surface-2);
       border-radius: 10px; border: 1px solid var(--border);
-      font-size: 0.8rem; color: var(--text-muted); line-height: 1.5;
+      font-size: 0.78rem; color: var(--text-muted); line-height: 1.5;
     }
     .pref-summary span { font-weight: 600; color: var(--text); }
 
     /* ── BATTERY RESERVE SLIDER ── */
-    #battery-reserve-section {
-      display: none;
-    }
-    .reserve-slider-wrap { padding: 0 2px; }
+    #battery-reserve-section { display: none; }
     .reserve-track {
       position: relative; height: 10px;
       background: var(--border); border-radius: 6px;
@@ -180,66 +319,40 @@
     }
     .reserve-keep-fill {
       position: absolute; left: 0; top: 0; height: 100%;
-      background: #10a37f; border-radius: 6px 0 0 6px;
-      transition: width 0.2s ease;
-      pointer-events: none;
+      background: var(--primary); border-radius: 6px 0 0 6px;
+      transition: width 0.2s ease; pointer-events: none;
     }
     .reserve-trade-fill {
       position: absolute; top: 0; height: 100%;
-      background: #6366f1; border-radius: 0 6px 6px 0;
-      transition: left 0.2s ease, width 0.2s ease;
-      pointer-events: none;
+      background: var(--blue); border-radius: 0 6px 6px 0;
+      transition: left 0.2s ease, width 0.2s ease; pointer-events: none;
     }
     .reserve-thumb {
       position: absolute; top: 50%; transform: translate(-50%, -50%);
       width: 20px; height: 20px; border-radius: 50%;
-      background: white; border: 2.5px solid #10a37f;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.18);
-      transition: left 0.2s ease;
-      pointer-events: none;
-      z-index: 2;
+      background: var(--surface); border: 2.5px solid var(--primary);
+      box-shadow: 0 0 10px var(--primary-glow-strong);
+      transition: left 0.2s ease; pointer-events: none; z-index: 2;
     }
     .reserve-range {
       position: absolute; top: 50%; left: 0; right: 0;
-      transform: translateY(-50%);
-      width: 100%; opacity: 0; cursor: pointer;
+      transform: translateY(-50%); width: 100%; opacity: 0; cursor: pointer;
       height: 28px; margin: 0; z-index: 3;
     }
-    .reserve-legend {
-      display: flex; justify-content: space-between;
-      margin-top: 14px; gap: 8px;
-    }
-    .reserve-legend-item {
-      display: flex; align-items: center; gap: 6px;
-      font-size: 0.78rem; color: var(--text-muted);
-    }
-    .reserve-legend-dot {
-      width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0;
-    }
-    .reserve-values {
-      display: flex; justify-content: space-between;
-      margin-top: 10px;
-    }
-    .reserve-val-block { text-align: center; }
-    .reserve-val-number {
-      font-size: 1.1rem; font-weight: 700; font-family: 'DM Mono', monospace;
-    }
-    .reserve-val-label {
-      font-size: 0.7rem; color: var(--text-muted); margin-top: 1px;
-    }
-    .reserve-val-block.keep .reserve-val-number { color: #10a37f; }
-    .reserve-val-block.trade .reserve-val-number { color: #6366f1; }
+    .reserve-legend { display: flex; justify-content: space-between; margin-top: 14px; gap: 8px; }
+    .reserve-legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.76rem; color: var(--text-muted); }
+    .reserve-legend-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
 
     /* ── FOOTER ── */
     .panel-footer { padding: 16px 20px; border-top: 1px solid var(--border); flex-shrink: 0; }
     #save-prefs {
-      width: 100%; padding: 10px; background: var(--primary); color: white;
-      border: none; border-radius: 10px; font-size: 0.88rem; font-weight: 600;
+      width: 100%; padding: 10px; background: var(--primary); color: #06130a;
+      border: none; border-radius: 10px; font-size: 0.86rem; font-weight: 700;
       font-family: 'DM Sans', sans-serif; cursor: pointer; transition: background 0.2s;
     }
     #save-prefs:hover { background: var(--primary-dark); }
     #save-note {
-      text-align: center; font-size: 0.75rem; color: var(--primary);
+      text-align: center; font-size: 0.74rem; color: var(--primary);
       margin-top: 8px; height: 16px; transition: opacity 0.3s; opacity: 0;
     }
     #save-note.show { opacity: 1; }
@@ -247,8 +360,8 @@
     /* ── PROFILE ── */
     .profile-note {
       display: flex; align-items: center; gap: 6px;
-      font-size: 0.74rem; color: var(--text-muted);
-      background: var(--bg); border: 1px solid var(--border);
+      font-size: 0.72rem; color: var(--text-muted);
+      background: var(--surface-2); border: 1px solid var(--border);
       border-radius: 8px; padding: 8px 12px;
     }
     .profile-field {
@@ -256,22 +369,11 @@
       padding: 11px 0; border-bottom: 1px solid var(--border);
     }
     .profile-field:last-child { border-bottom: none; }
-    .profile-field-label { font-size: 0.83rem; color: var(--text); font-weight: 500; }
-    .profile-number {
-      font-size: 1rem; font-weight: 700; color: var(--primary);
-      font-family: 'DM Mono', monospace;
-    }
-    .profile-badge {
-      font-size: 0.75rem; font-weight: 600;
-      padding: 3px 10px; border-radius: 20px; letter-spacing: 0.02em;
-    }
-    .profile-badge[data-value="true"] {
-      background: rgba(16,163,127,0.1); color: var(--primary);
-      border: 1px solid rgba(16,163,127,0.25);
-    }
-    .profile-badge[data-value="false"] {
-      background: var(--bg); color: var(--text-muted); border: 1px solid var(--border);
-    }
+    .profile-field-label { font-size: 0.82rem; color: var(--text); font-weight: 500; }
+    .profile-number { font-size: 1rem; font-weight: 700; color: var(--primary); font-family: 'DM Mono', monospace; }
+    .profile-badge { font-size: 0.74rem; font-weight: 600; padding: 3px 10px; border-radius: 20px; letter-spacing: 0.02em; }
+    .profile-badge[data-value="true"] { background: var(--primary-glow); color: var(--primary); border: 1px solid rgba(57,224,122,0.3); }
+    .profile-badge[data-value="false"] { background: var(--surface-2); color: var(--text-muted); border: 1px solid var(--border); }
   </style>
 </head>
 <body>
@@ -284,12 +386,52 @@
         <div class="header-subtitle">Smart Energy Management</div>
       </div>
     </div>
+    <div class="header-status"><span class="status-dot"></span> Agent active</div>
   </header>
+
+  <!-- DASHBOARD ROW — TODO: no real data source wired for these yet.
+       Battery card: only shown if profile.home_battery is true.
+       Solar chart: only shown if profile.solar_panels is true. -->
+  <div id="dashboard-row-wrap" style="margin-right: var(--panel-width);">
+    <div id="dashboard-row">
+      <div class="stat-card todo" id="battery-card">
+        <div class="stat-card-label">🔋 Battery <span class="todo-pill">TODO</span></div>
+        <div class="stat-card-value accent" id="soc-value">— %</div>
+        <div class="soc-bar-track"><div class="soc-bar-fill" id="soc-fill" style="width:0%"></div></div>
+        <div class="stat-card-sub">state of charge — needs battery telemetry source</div>
+      </div>
+
+      <div class="stat-card todo" id="solar-card">
+        <div class="stat-card-label">☀️ Solar and demand — <span id="solar-date-range">…</span></div>
+        <svg id="solar-chart-svg" viewBox="0 0 560 120" style="width:100%; height:120px; margin-top:8px;"></svg>
+        <div class="spark-legend" style="margin-top:4px;">
+          <span><span class="spark-dot" style="background:var(--blue)"></span>Demand</span>
+          <span><span class="spark-dot" style="background:var(--amber)"></span>Solar</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- CYCLE STEPPER — grouped from the real BIDDING_STEPS / CLEARING_STEPS names.
+         TODO: wire currentPhase/status to a real /pipeline/status call once
+         PipelineStatus.snapshot()'s shape is known. Currently hardcoded for layout. -->
+    <div id="cycle-stepper">
+      <div id="cycle-stepper-header">
+        <span id="cycle-stepper-title">Trading cycle</span>
+        <span id="cycle-status-text" style="font-size:0.72rem; color:var(--text-muted);"></span>
+      </div>
+      <div class="cycle-steps" id="cycle-steps">
+        <div class="cycle-track-bg"></div>
+        <div class="cycle-track-fill" id="cycle-track-fill"></div>
+      </div>
+    </div>
+
+    <div id="trade-summary-card"><span class="trade-icon">✓</span><span id="trade-summary-text"></span></div>
+  </div>
 
   <div class="main-layout">
 
     <!-- CHAT -->
-    <div class="chat-area">
+    <div class="chat-column">
       <div id="chat-box"></div>
       <div class="input-area">
         <input id="user-input" placeholder="Message MAS4TE Assistant…" autocomplete="off"
@@ -377,17 +519,17 @@
                   Based on your
                   <span style="font-weight:600; color:var(--text);" id="reserve-capacity-label">—</span>
                   battery:
-                  keep <span style="font-weight:700; color:#10a37f;" id="reserve-keep-kwh">—</span> kWh ·
-                  trade up to <span style="font-weight:700; color:#6366f1;" id="reserve-trade-kwh">—</span> kWh
+                  keep <span style="font-weight:700; color:var(--primary);" id="reserve-keep-kwh">—</span> kWh ·
+                  trade up to <span style="font-weight:700; color:var(--blue);" id="reserve-trade-kwh">—</span> kWh
                 </div>
               </div>
               <div class="reserve-legend">
                 <div class="reserve-legend-item">
-                    <div class="reserve-legend-dot" style="background:#10a37f;"></div>
+                    <div class="reserve-legend-dot" style="background:var(--primary);"></div>
                     <span>Keep <strong id="reserve-keep-pct">20%</strong><span id="reserve-keep-label"></span></span>
                 </div>
                 <div class="reserve-legend-item">
-                    <div class="reserve-legend-dot" style="background:#6366f1;"></div>
+                    <div class="reserve-legend-dot" style="background:var(--blue);"></div>
                     <span>Trade <strong id="reserve-trade-pct">80%</strong><span id="reserve-trade-label"></span></span>
                 </div>
               </div>
@@ -454,32 +596,31 @@
   <script>
     // ── SLIDER DATA ──
     const PREF_STEPS = [
-      { label: 'Profit', color: '#6366f1' },
-      { label: 'Green',  color: '#22c55e' },
+      { label: 'Profit', color: '#4a90e2' },
+      { label: 'Green',  color: '#39e07a' },
     ];
     const EXPERTISE_STEPS = [
-      { label: 'Beginner',     color: '#10a37f' },
-      { label: 'Intermediate', color: '#f59e0b' },
-      { label: 'Expert',       color: '#6366f1' },
+      { label: 'Beginner',     color: '#39e07a' },
+      { label: 'Intermediate', color: '#f5a623' },
+      { label: 'Expert',       color: '#4a90e2' },
     ];
     const BORDER_STEPS = [
-      { label: 'Community', color: '#10a37f' },
-      { label: 'Country',   color: '#f59e0b' },
-      { label: 'All',       color: '#6366f1' },
+      { label: 'Community', color: '#39e07a' },
+      { label: 'Country',   color: '#f5a623' },
+      { label: 'All',       color: '#4a90e2' },
     ];
     const RISK_STEPS = [
-      { label: 'Low',     color: '#3b82f6' },
-      { label: 'Medium',  color: '#f59e0b' },
+      { label: 'Low',     color: '#4a90e2' },
+      { label: 'Medium',  color: '#f5a623' },
       { label: 'High',    color: '#ef4444' },
+    ];
 
-    ]
-
-    let prefValue      = 0; // 0 = profit, 1 = green
+    let prefValue      = 0;
     let expertiseValue = 0;
-    let borderValue    = 2; // 0 = community, 1 = country, 2 = all
+    let borderValue    = 2;
     let batteryReserve = 20;
     let batteryCapacityKwh = null;
-    let riskValue = 0; // 0 = Low(5%), 1 = Medium(35%), 2 = High(50%)
+    let riskValue = 0;
 
     // ── STEP SLIDER BUILDER ──
     function buildSlider(dotsId, labelsId, fillId, rangeId, steps, getValue, setValue) {
@@ -568,31 +709,30 @@
       updateSummary();
     }
 
-  function toggleRiskVisibility() {
-    const isGreen = prefValue === 1;
-    document.getElementById('risk-range').disabled = isGreen;
-    document.getElementById('risk-section').style.opacity = isGreen ? '0.45' : '1';
-    document.getElementById('risk-section').style.pointerEvents = isGreen ? 'none' : 'auto';
-    document.getElementById('risk-green-note').style.display = isGreen ? 'flex' : 'none';
-  }
+    function toggleRiskVisibility() {
+      const isGreen = prefValue === 1;
+      document.getElementById('risk-range').disabled = isGreen;
+      document.getElementById('risk-section').style.opacity = isGreen ? '0.45' : '1';
+      document.getElementById('risk-section').style.pointerEvents = isGreen ? 'none' : 'auto';
+      document.getElementById('risk-green-note').style.display = isGreen ? 'flex' : 'none';
+    }
 
-  function updateSummary() {
-    toggleRiskVisibility();
-    const p = PREF_STEPS[prefValue].label;
-    const b = BORDER_STEPS[borderValue].label;
-    const scopeIcon = borderValue === 0 ? '🏘️' : borderValue === 1 ? '🇪🇺' : '🌍';
-    let html = `Strategy: <span>${p === 'Green' ? '🌱 Green' : '💰 Profit'}</span>`;
-    html += ` · <span>${scopeIcon} ${b}</span>`;
-    if (prefValue !== 1) {
-      html += ` · <span>⚖️ ${RISK_STEPS[riskValue].label} risk</span>`;
+    function updateSummary() {
+      toggleRiskVisibility();
+      const p = PREF_STEPS[prefValue].label;
+      const b = BORDER_STEPS[borderValue].label;
+      const scopeIcon = borderValue === 0 ? '🏘️' : borderValue === 1 ? '🇪🇺' : '🌍';
+      let html = `Strategy: <span>${p === 'Green' ? '🌱 Green' : '💰 Profit'}</span>`;
+      html += ` · <span>${scopeIcon} ${b}</span>`;
+      if (prefValue !== 1) {
+        html += ` · <span>⚖️ ${RISK_STEPS[riskValue].label} risk</span>`;
+      }
+      if (document.getElementById('battery-reserve-section').style.display === 'block') {
+        const trade = 100 - batteryReserve;
+        html += ` · <span>🔋 Keep ${batteryReserve}% · Trade ${trade}%</span>`;
+      }
+      document.getElementById('pref-summary').innerHTML = html;
     }
-    if (document.getElementById('battery-reserve-section').style.display === 'block') {
-      const trade = 100 - batteryReserve;
-      html += ` · <span>🔋 Keep ${batteryReserve}% · Trade ${trade}%</span>`;
-    }
-    document.getElementById('pref-summary').innerHTML = html;
-  }
-    
 
     function initSliders() {
       buildSlider('pref-dots','pref-labels','pref-fill','pref-range', PREF_STEPS, ()=>prefValue, v=>{prefValue=v;});
@@ -624,7 +764,7 @@
         if (d.location) {
           const locEl = document.getElementById('profile-location');
           locEl.textContent = d.location;
-          locEl.style.background = 'var(--bg)';
+          locEl.style.background = 'var(--surface-2)';
           locEl.style.color = 'var(--text)';
           locEl.style.border = '1px solid var(--border)';
         }
@@ -640,12 +780,34 @@
           }
           refreshReserve();
         }
+
+        // Battery and solar cards only make sense if the profile actually has them.
+        const hasBattery = !!d.home_battery;
+        const hasSolar   = !!d.solar_panels;
+        document.getElementById('battery-card').style.display = hasBattery ? 'flex' : 'none';
+        document.getElementById('solar-card').style.display   = hasSolar   ? 'flex' : 'none';
+        applyDashboardRowLayout(hasBattery, hasSolar);
       }
       catch(e) {
-        // Fallback for development: show battery slider even without live endpoint
         document.getElementById('battery-reserve-section').style.display = 'block';
         refreshReserve();
+        // Profile fetch failed — can't tell if this household has battery/solar,
+        // so hide both rather than guess.
+        document.getElementById('battery-card').style.display = 'none';
+        document.getElementById('solar-card').style.display = 'none';
+        applyDashboardRowLayout(false, false);
       }
+    }
+
+    // Lets the surviving card take the full row width when only one applies,
+    // and hides the row entirely when neither does.
+    function applyDashboardRowLayout(hasBattery, hasSolar) {
+      const row = document.getElementById('dashboard-row');
+      const batteryCard = document.getElementById('battery-card');
+      const solarCard = document.getElementById('solar-card');
+      batteryCard.style.gridColumn = (hasBattery && !hasSolar) ? '1 / -1' : 'auto';
+      solarCard.style.gridColumn   = (hasSolar && !hasBattery) ? '1 / -1' : 'auto';
+      row.style.display = (hasBattery || hasSolar) ? 'grid' : 'none';
     }
 
     function setBadge(id, val) {
@@ -653,6 +815,205 @@
       const el = document.getElementById(id);
       el.dataset.value = val ? 'true' : 'false';
       el.textContent = val ? 'Yes' : 'No';
+    }
+
+        // ── CYCLE STEPPER ──
+    // PipelineStatus is shared between bidding and clearing and resets on
+    // each run, so we infer the overall phase from which step-name-shape
+    // (bidding vs clearing) the snapshot currently shows.
+    const CYCLE_PHASES = [
+      { key: 'forecasting', label: 'Preparing bids',
+        steps: ['retrieve_profile','retrieve_preferences','retrieve_market_info',
+                'forecast_demand','forecast_solar','forecast_prices'] },
+      { key: 'deciding',    label: 'Deciding bid',
+        steps: ['reason_volume_range','battery_utility'] },
+      { key: 'submitted',   label: 'Waiting on market decision',
+        steps: ['make_orderbook','publish_bid'] },
+      { key: 'cleared',     label: 'Market decision received',
+        steps: ['retrieve_clearing_info','publish_battery_schedule'] },
+    ];
+
+    let CURRENT_PHASE = -1;      // -1 = nothing started yet
+    let CYCLE_STATUS_TEXT = 'Waiting for market to open';
+
+    function computeCyclePhase(snapshot) {
+      const steps = snapshot.steps || [];
+      const isClearingShape = steps.includes('retrieve_clearing_info');
+
+      if (steps.length === 0) {
+        return { phase: -1, text: snapshot.message || 'Waiting for market to open' };
+      }
+
+      if (isClearingShape) {
+        if (snapshot.status === 'done') {
+          return { phase: 3, text: snapshot.message || 'Trade cleared — waiting for next market' };
+        }
+        return { phase: 3, text: snapshot.current ? `Clearing — ${snapshot.current}` : 'Clearing…' };
+      }
+
+      // Bidding-shaped snapshot.
+      if (snapshot.status === 'done') {
+        return { phase: 2, text: 'Bid submitted — waiting for clearing' };
+      }
+      if (snapshot.status === 'failed') {
+        return { phase: -1, text: snapshot.message || 'Pipeline failed' };
+      }
+
+      const seen = Object.keys(snapshot.done || {});
+      if (snapshot.current) seen.push(snapshot.current);
+      let phase = 0;
+      for (let i = 0; i < 3; i++) {
+        if (CYCLE_PHASES[i].steps.some(s => seen.includes(s))) phase = i;
+      }
+      return { phase, text: snapshot.current ? `Running — ${snapshot.current}` : 'Working…' };
+    }
+
+    function renderCycleStepper() {
+      const container = document.getElementById('cycle-steps');
+      container.querySelectorAll('.cycle-step').forEach(el => el.remove());
+
+      CYCLE_PHASES.forEach((phase, i) => {
+        const step = document.createElement('div');
+        step.className = 'cycle-step';
+
+        const dot = document.createElement('div');
+        dot.className = 'cycle-step-dot';
+        if (i < CURRENT_PHASE) { dot.classList.add('done'); dot.textContent = '✓'; }
+        else if (i === CURRENT_PHASE) { dot.classList.add('active'); dot.textContent = (i + 1); }
+        else { dot.textContent = (i + 1); }
+
+        const label = document.createElement('div');
+        label.className = 'cycle-step-label';
+        if (i < CURRENT_PHASE) label.classList.add('done');
+        if (i === CURRENT_PHASE) label.classList.add('active');
+        label.textContent = phase.label;
+
+        step.appendChild(dot);
+        step.appendChild(label);
+        container.appendChild(step);
+      });
+
+      const pct = CURRENT_PHASE >= 0
+        ? (CURRENT_PHASE / (CYCLE_PHASES.length - 1)) * 100
+        : 0;
+      document.getElementById('cycle-track-fill').style.width =
+        `calc(${pct}% * (100% - 44px) / 100%)`;
+
+      document.getElementById('cycle-status-text').textContent = CYCLE_STATUS_TEXT;
+    }
+
+    async function pollCycleStatus() {
+      try {
+        const res = await fetch('/pipeline/status');
+        const snapshot = await res.json();
+        const result = computeCyclePhase(snapshot);
+        CURRENT_PHASE = result.phase;
+        CYCLE_STATUS_TEXT = result.text;
+      } catch (e) {
+        CYCLE_STATUS_TEXT = 'Status unavailable';
+      }
+      renderCycleStepper();
+    }
+
+    function startCycleStatusPolling() {
+      pollCycleStatus();
+      setInterval(pollCycleStatus, 5000);   // snappier than the other polls
+    }
+
+    // ── SOLAR/DEMAND 7-DAY CHART ──
+    let CHART_DAYS = [];
+    let DEMAND_KWH = [];
+    let SOLAR_KWH  = [];
+
+    let lastEnergyWeekPeriod = null;
+
+    async function fetchEnergyWeek() {
+      try {
+        const res = await fetch('/prosumer/energy-week');
+        const d = await res.json();
+        const periodKey = `${d.period_start}|${d.period_end}`;
+
+        CHART_DAYS = d.days || [];
+        DEMAND_KWH = d.demand_kwh || [];
+        SOLAR_KWH  = d.solar_kwh || [];
+
+        const rangeEl = document.getElementById('solar-date-range');
+        if (d.period_start && d.period_end) {
+          rangeEl.textContent = `${d.period_start} to ${d.period_end}`;
+        } else {
+          rangeEl.textContent = 'previous 7 days';
+        }
+
+        lastEnergyWeekPeriod = periodKey;
+      } catch (e) {
+        CHART_DAYS = []; DEMAND_KWH = []; SOLAR_KWH = [];
+      }
+      renderSolarChart();
+    }
+
+    function startEnergyWeekPolling() {
+      fetchEnergyWeek();                        // first check immediately
+      setInterval(fetchEnergyWeek, 15000);       // then every 15s
+    }
+
+    function renderSolarChart() {
+      const svg = document.getElementById('solar-chart-svg');
+      if (CHART_DAYS.length === 0) { svg.innerHTML = ''; return; }
+      const W = 560, H = 120, padTop = 10, padBottom = 24, padSide = 8;
+      const chartH = H - padTop - padBottom;
+      const maxVal = Math.max(...DEMAND_KWH, ...SOLAR_KWH) * 1.1;
+      const groupW = (W - padSide * 2) / CHART_DAYS.length;
+      const barW = groupW * 0.32;
+      
+
+      let svgContent = '';
+      CHART_DAYS.forEach((day, i) => {
+        const groupX = padSide + i * groupW + groupW / 2;
+        const demandH = (DEMAND_KWH[i] / maxVal) * chartH;
+        const solarH  = (SOLAR_KWH[i]  / maxVal) * chartH;
+
+        svgContent += `<rect x="${groupX - barW - 3}" y="${padTop + chartH - demandH}" width="${barW}" height="${demandH}" fill="#4a90e2" rx="2"/>`;
+        svgContent += `<rect x="${groupX + 3}" y="${padTop + chartH - solarH}" width="${barW}" height="${solarH}" fill="#f5a623" rx="2"/>`;
+        svgContent += `<text x="${groupX}" y="${H - 6}" text-anchor="middle" font-size="11" fill="#5b6560" font-family="DM Sans, sans-serif">${day}</text>`;
+      });
+
+      svg.innerHTML = svgContent;
+    }
+
+    // ── TRADE SUMMARY ── (real fetch, dummy fallback stays hidden)
+    let lastTradeSummaryJSON = null;
+
+    async function checkTradeSummary() {
+      try {
+        const res = await fetch('/prosumer/last-trade-summary');
+        const d = await res.json();
+        const json = JSON.stringify(d);
+
+        // Render the card regardless (handles first load too).
+        const card = document.getElementById('trade-summary-card');
+        if (!d.traded) {
+          card.style.display = 'none';
+        } else {
+          const roleWord = d.role === 'seller' ? 'Sold' : 'Bought';
+          let text = `<strong>${roleWord} ${d.volume_kwh} kWh</strong>`;
+          if (d.clearing_price_per_kwh != null) text += ` at €${d.clearing_price_per_kwh}/kWh`;
+          if (d.battery_kept_pct != null) text += ` · Battery kept: ${d.battery_kept_pct}%`;
+          document.getElementById('trade-summary-text').innerHTML = text;
+          card.style.display = 'flex';
+        }
+
+        // If this differs from what we last saw, a new cycle completed —
+        // the "previous 7 days" window has shifted, so refresh the chart too.
+        if (lastTradeSummaryJSON !== null && json !== lastTradeSummaryJSON) {
+          fetchEnergyWeek();
+        }
+        lastTradeSummaryJSON = json;
+      } catch (e) { /* leave things as they were */ }
+    }
+
+    function startTradeSummaryPolling() {
+      checkTradeSummary();                       // first check immediately
+      setInterval(checkTradeSummary, 20000);      // then every 20s
     }
 
     // ── SAVE ──
@@ -675,7 +1036,7 @@
         note.style.color = 'var(--primary)';
       } catch(e) {
         note.textContent = '✗ Failed to save, try again';
-        note.style.color = '#ef4444';
+        note.style.color = 'var(--danger)';
       }
       note.classList.add('show');
       setTimeout(() => note.classList.remove('show'), 2200);
@@ -684,7 +1045,10 @@
     // ── INIT ──
     window.onload = function() {
       initSliders();
+      startEnergyWeekPolling();
       loadProfile();
+      startTradeSummaryPolling();
+      startCycleStatusPolling();
       document.getElementById('chat-box').innerHTML = `
         <div class="message assistant-message">
           Hello! I'm your MAS4TE Assistant. You can ask me about your energy consumption or actions on the market.

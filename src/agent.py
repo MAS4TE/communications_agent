@@ -56,6 +56,8 @@ class Agent:
         self.last_bidding_data: dict = {}
         self.last_bid_trace: list = []
         self.clearing_traces: list = []
+        self.last_trade_summary: dict = {"traded": False}
+        self.last_window: dict | None = None
 
         # Market link and the one worker that runs pipelines.
         self.market_client = MarketClient(self)

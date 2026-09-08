@@ -97,3 +97,34 @@ def load_profile_metadata(profile_id: int) -> dict:
             f"(known: {sorted(table.index.tolist())})"
         )
     return table.loc[profile_id].to_dict()
+
+def load_previous_week_energy_kwh(profile_id: int, window_start, days: int = 7) -> dict:
+    """Daily demand/solar totals (kWh) for the week before window_start.
+
+    window_start is the start of the upcoming trading window (from
+    ctx.data["window"]["start"]) — the closest thing this backtest has to
+    "now". "Previous week" = the `days` days immediately before that.
+    Assumes 15-minute steps (kW * 0.25h per row).
+    """
+    demand_path = DATA_DIR / "profile_data" / f"profile_{profile_id}_demand.csv"
+    solar_path = DATA_DIR / "profile_data" / f"profile_{profile_id}_solar.csv"
+    _require(demand_path)
+    _require(solar_path)
+
+    demand = pd.read_csv(demand_path, index_col=0, parse_dates=True)["load_kw"]
+    solar = pd.read_csv(solar_path, index_col=0, parse_dates=True)["solar_kw"]
+
+    window_start = pd.Timestamp(window_start)
+    period_end = (window_start - pd.Timedelta(days=1)).normalize()
+    period_start = period_end - pd.Timedelta(days=days - 1)
+
+    demand_daily = (demand.resample("D").sum() * 0.25).loc[period_start:period_end]
+    solar_daily = (solar.resample("D").sum() * 0.25).loc[period_start:period_end]
+
+    return {
+        "days": [d.strftime("%a") for d in demand_daily.index],
+        "demand_kwh": [round(v, 1) for v in demand_daily.tolist()],
+        "solar_kwh": [round(v, 1) for v in solar_daily.reindex(demand_daily.index, fill_value=0).tolist()],
+        "period_start": f"{period_start.strftime('%b')} {period_start.day}",
+        "period_end": f"{period_end.strftime('%b')} {period_end.day}",
+    }

@@ -71,12 +71,38 @@ def charge_schedule_for(ctx: MarketContext, volume: float) -> pd.DataFrame | Non
     )
     return result.get("storages_to_calc_charge_ts", {}).get(volume)
 
+def build_trade_summary(ctx: MarketContext) -> dict:
+    """Plain-language numbers for the summary card — accepted volume, not bid volume."""
+    accepted_volume = ctx.data.get("accepted_volume_kwh", 0)
+    if accepted_volume == 0:
+        return {"traded": False}
+
+    is_seller = ctx.data.get("storage_size_kwh", 0) > 0
+    orderbook = ctx.market_data.get("orderbook", [])
+    accepted = [o for o in orderbook if abs(o.get("accepted_volume", 0)) > 0]
+    clearing_price = orderbook[0]["accepted_price"] if orderbook else None
+
+    battery_kept_pct = None
+    if is_seller:
+        total = ctx.data["storage_size_kwh"]
+        battery_kept_pct = round(100 * (total - accepted_volume) / total) if total > 0 else None
+
+    return {
+        "traded": True,
+        "role": "seller" if is_seller else "buyer",
+        "volume_kwh": round(accepted_volume, 1),
+        "clearing_price_per_kwh": round(clearing_price, 3) if clearing_price is not None else None,
+        "battery_kept_pct": battery_kept_pct,
+    }
+
 
 # --------------------------------------------------------------------------
 # Steps
 # --------------------------------------------------------------------------
 def retrieve_clearing_info(ctx: MarketContext):
+    log.info("clearing raw market_data keys: %s", list(ctx.market_data.keys()))  # temporary
     orderbook = ctx.market_data.get("orderbook", [])
+    log.info("clearing raw orderbook (%d orders): %s", len(orderbook), orderbook[:3])   # add this line
     role = "seller" if ctx.data.get("storage_size_kwh", 0) > 0 else "buyer"
 
     accepted = [o for o in orderbook if abs(o.get("accepted_volume", 0)) > 0]
@@ -185,4 +211,6 @@ def run_clearing(agent, market_data: dict) -> MarketContext:
     ctx = MarketContext(agent=agent, market_data=market_data, data=dict(agent.last_bidding_data))
     run_pipeline(ctx, CLEARING_STEPS, agent.pipeline_status, name="clearing")
     agent.clearing_traces.append(ctx.trace)
+    agent.last_trade_summary = build_trade_summary(ctx)   # add this
+    log.info("trade summary: %s", agent.last_trade_summary)   # temporary, remove once confirmed
     return ctx

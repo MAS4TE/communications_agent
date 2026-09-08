@@ -17,6 +17,7 @@ from pydantic import BaseModel
 
 from agent import Agent
 from config import STATIC_DIR
+from prosumer import load_previous_week_energy_kwh
 
 router = APIRouter()
 
@@ -58,6 +59,10 @@ def prosumer_profile(request: Request):
 def get_preferences(request: Request):
     return get_agent(request).preferences
 
+@router.get("/prosumer/last-trade-summary")
+def last_trade_summary(request: Request):
+    return get_agent(request).last_trade_summary
+
 
 @router.post("/prosumer/preferences")
 def save_preferences(body: PreferencesRequest, request: Request):
@@ -74,3 +79,10 @@ def save_preferences(body: PreferencesRequest, request: Request):
 @router.get("/pipeline/status")
 def pipeline_status(request: Request):
     return get_agent(request).pipeline_status.snapshot()
+
+@router.get("/prosumer/energy-week")
+def energy_week(request: Request):
+    agent = get_agent(request)
+    if not agent.last_window:
+        return {"days": [], "demand_kwh": [], "solar_kwh": []}
+    return load_previous_week_energy_kwh(agent.profile_id, window_start=agent.last_window["start"])
