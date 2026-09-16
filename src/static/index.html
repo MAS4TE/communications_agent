@@ -27,14 +27,16 @@
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
-    body {
+    html, body {
       font-family: 'DM Sans', sans-serif;
       background: var(--bg);
       color: var(--text);
-      height: 100vh;
+    }
+
+    body {
       display: flex;
       flex-direction: column;
-      overflow: hidden;
+      overflow-y: auto;
     }
 
     /* ── HEADER ── */
@@ -69,17 +71,18 @@
     }
 
     /* ── LAYOUT ── */
-    .main-layout { display: flex; flex: 1; overflow: hidden; }
+    .main-layout { display: flex; flex: 1; }
     .chat-column {
       flex: 1; display: flex; flex-direction: column;
-      overflow: hidden; margin-right: var(--panel-width);
+      margin-right: var(--panel-width);
     }
 
     /* ── DASHBOARD ROW ── */
+    #dashboard-row-wrap { flex-shrink: 0; }
     #dashboard-row {
-      display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;
+      display: flex; gap: 12px; align-items: stretch;
       padding: 16px 24px 0; background: var(--surface);
-      flex-shrink: 0;
+      flex-shrink: 0; flex-wrap: wrap;
     }
     .stat-card {
       background: var(--surface-2); border: 1px solid var(--border);
@@ -93,18 +96,10 @@
       text-transform: uppercase; letter-spacing: 0.06em;
       display: flex; align-items: center; gap: 6px;
     }
-    .stat-card-value {
-      font-size: 1.3rem; font-weight: 700; font-family: 'DM Mono', monospace;
-      color: var(--text);
-    }
-    .stat-card-value.accent { color: var(--primary); }
     .stat-card-sub { font-size: 0.72rem; color: var(--text-faint); }
 
-    /* TODO cards — no real data source wired yet */
-    .stat-card.todo {
-      border-style: dashed; border-color: var(--border-strong);
-      opacity: 0.7;
-    }
+    #solar-card { flex: 1 1 300px; min-width: 0; }
+
     .todo-pill {
       font-size: 0.6rem; font-weight: 700; letter-spacing: 0.05em;
       color: var(--amber); background: rgba(245,166,35,0.12);
@@ -112,9 +107,58 @@
       padding: 1px 7px; margin-left: auto;
     }
 
+    /* mini bar for battery SoC */
+    .soc-bar-track {
+      height: 6px; background: var(--border); border-radius: 4px;
+      overflow: hidden; margin-top: 4px;
+    }
+    .soc-bar-fill {
+      height: 100%; background: linear-gradient(90deg, var(--primary-dark), var(--primary));
+      border-radius: 4px; transition: width 0.4s ease;
+    }
+
+    /* mini sparkline row */
+    .spark-legend {
+      display: flex; gap: 12px; font-size: 0.68rem; color: var(--text-muted);
+    }
+    .spark-legend span { display: flex; align-items: center; gap: 4px; }
+    .spark-dot { width: 7px; height: 7px; border-radius: 2px; }
+
+    /* trade summary card — three groups: last week / all time / battery SoC */
+    #trade-summary-card {
+      flex: 0 0 380px; max-width: 380px;
+      padding: 14px 16px; background: var(--surface-2); border: 1px solid var(--primary);
+      border-radius: 12px; display: flex; flex-direction: column; gap: 8px;
+    }
+    .trade-summary-header {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 0.7rem; font-weight: 600; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .trade-summary-header .trade-icon {
+      width: 18px; height: 18px; border-radius: 50%;
+      background: var(--primary-glow); color: var(--primary);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.65rem; flex-shrink: 0;
+    }
+    .trade-summary-groups { display: flex; gap: 14px; }
+    .trade-group { flex: 1; min-width: 0; }
+    .trade-group-label {
+      font-size: 0.62rem; color: var(--text-faint); text-transform: uppercase;
+      letter-spacing: 0.05em; margin-bottom: 6px;
+      display: flex; align-items: center; gap: 4px;
+    }
+    .trade-group-value {
+      font-size: 1rem; font-weight: 700; font-family: 'DM Mono', monospace;
+      color: var(--text); line-height: 1.3;
+    }
+    .trade-group-value.accent { color: var(--primary); }
+    .trade-group-sub { font-size: 0.66rem; color: var(--text-muted); margin-top: 4px; }
+    .trade-group.todo { border-left: 1px dashed var(--border-strong); padding-left: 14px; }
+
     /* ── CYCLE STEPPER ── */
     #cycle-stepper {
-      margin: 12px 24px 0; padding: 18px 22px;
+      margin: 12px 24px 16px; padding: 18px 22px;
       background: var(--surface-2); border: 1px solid var(--border);
       border-radius: 12px; flex-shrink: 0;
     }
@@ -165,41 +209,11 @@
     .cycle-step-label.done { color: var(--primary); }
     .cycle-step-label.active { color: var(--text); font-weight: 600; }
 
-    /* mini bar for battery SoC */
-    .soc-bar-track {
-      height: 6px; background: var(--border); border-radius: 4px;
-      overflow: hidden; margin-top: 2px;
-    }
-    .soc-bar-fill {
-      height: 100%; background: linear-gradient(90deg, var(--primary-dark), var(--primary));
-      border-radius: 4px; transition: width 0.4s ease;
-    }
-
-    /* mini sparkline row */
-    .spark-legend {
-      display: flex; gap: 12px; font-size: 0.68rem; color: var(--text-muted);
-    }
-    .spark-legend span { display: flex; align-items: center; gap: 4px; }
-    .spark-dot { width: 7px; height: 7px; border-radius: 2px; }
-
-    /* trade summary banner */
-    #trade-summary-card {
-      display: none; margin: 16px 24px 0; padding: 12px 16px;
-      background: var(--surface-2); border: 1px solid var(--primary);
-      border-radius: 10px; font-size: 0.86rem; color: var(--text);
-      display: flex; align-items: center; gap: 10px;
-    }
-    #trade-summary-card .trade-icon {
-      width: 26px; height: 26px; border-radius: 50%;
-      background: var(--primary-glow); color: var(--primary);
-      display: flex; align-items: center; justify-content: center;
-      font-size: 0.85rem; flex-shrink: 0;
-    }
-
     /* ── CHAT ── */
     #chat-box {
       flex: 1; overflow-y: auto; padding: 20px 24px;
       display: flex; flex-direction: column; gap: 10px;
+      justify-content: flex-end;
     }
     .message {
       padding: 12px 16px; border-radius: 14px; max-width: 74%;
@@ -303,12 +317,6 @@
       transition: color 0.2s; text-align: center; cursor: pointer;
     }
     .step-label.active { font-weight: 700; color: var(--primary); }
-    .pref-summary {
-      padding: 10px 14px; background: var(--surface-2);
-      border-radius: 10px; border: 1px solid var(--border);
-      font-size: 0.78rem; color: var(--text-muted); line-height: 1.5;
-    }
-    .pref-summary span { font-weight: 600; color: var(--text); }
 
     /* ── BATTERY RESERVE SLIDER ── */
     #battery-reserve-section { display: none; }
@@ -383,25 +391,20 @@
       <img src="/static/Logo_MAS4TE_EN.png" alt="MAS4TE Logo">
       <div>
         <div class="header-title">MAS4TE Assistant</div>
-        <div class="header-subtitle">Smart Energy Management</div>
+        <div class="header-subtitle">Smart Energy and Storage Trading Management</div>
       </div>
     </div>
     <div class="header-status"><span class="status-dot"></span> Agent active</div>
   </header>
 
-  <!-- DASHBOARD ROW — TODO: no real data source wired for these yet.
-       Battery card: only shown if profile.home_battery is true.
-       Solar chart: only shown if profile.solar_panels is true. -->
+  <!-- DASHBOARD ROW — TODO: battery SoC has no real data source wired yet.
+       Solar chart: only shown if profile.solar_panels is true.
+       Battery SoC group: only shown if profile.home_battery is true.
+       Trade summary (last week + all time): always shown, zeros if nothing traded. -->
   <div id="dashboard-row-wrap" style="margin-right: var(--panel-width);">
     <div id="dashboard-row">
-      <div class="stat-card todo" id="battery-card">
-        <div class="stat-card-label">🔋 Battery <span class="todo-pill">TODO</span></div>
-        <div class="stat-card-value accent" id="soc-value">— %</div>
-        <div class="soc-bar-track"><div class="soc-bar-fill" id="soc-fill" style="width:0%"></div></div>
-        <div class="stat-card-sub">state of charge — needs battery telemetry source</div>
-      </div>
 
-      <div class="stat-card todo" id="solar-card">
+      <div class="stat-card" id="solar-card">
         <div class="stat-card-label">☀️ Solar and demand — <span id="solar-date-range">…</span></div>
         <svg id="solar-chart-svg" viewBox="0 0 560 120" style="width:100%; height:120px; margin-top:8px;"></svg>
         <div class="spark-legend" style="margin-top:4px;">
@@ -409,11 +412,34 @@
           <span><span class="spark-dot" style="background:var(--amber)"></span>Solar</span>
         </div>
       </div>
+
+      <div id="trade-summary-card">
+        <div class="trade-summary-header"><span class="trade-icon">✓</span><span id="trade-summary-role"></span></div>
+        <div class="trade-summary-groups">
+          <div class="trade-group">
+            <div class="trade-group-label">Last week</div>
+            <div class="trade-group-value" id="trade-stat-volume">0 kWh</div>
+            <div class="trade-group-value accent" id="trade-stat-total">€0.00</div>
+            <div class="trade-group-sub" id="battery-kept-sub">—</div>
+          </div>
+          <div class="trade-group">
+            <div class="trade-group-label">Total</div>
+            <div class="trade-group-value" id="trade-stat-cum-volume">0 kWh</div>
+            <div class="trade-group-value accent" id="trade-stat-cum-total">€0.00</div>
+          </div>
+          <div class="trade-group todo" id="battery-soc-group">
+            <div class="trade-group-label">Battery <span class="todo-pill">TODO</span></div>
+            <div class="trade-group-value accent" id="soc-value">— %</div>
+            <div class="soc-bar-track"><div class="soc-bar-fill" id="soc-fill" style="width:0%"></div></div>
+          </div>
+        </div>
+      </div>
+
     </div>
 
-    <!-- CYCLE STEPPER — grouped from the real BIDDING_STEPS / CLEARING_STEPS names.
-         TODO: wire currentPhase/status to a real /pipeline/status call once
-         PipelineStatus.snapshot()'s shape is known. Currently hardcoded for layout. -->
+    <!-- CYCLE STEPPER — grouped from the real BIDDING_STEPS / CLEARING_STEPS names,
+         polled live from /pipeline/status. PipelineStatus resets per run, so the
+         phase is inferred from which step-name-shape (bidding vs clearing) shows. -->
     <div id="cycle-stepper">
       <div id="cycle-stepper-header">
         <span id="cycle-stepper-title">Trading cycle</span>
@@ -424,8 +450,6 @@
         <div class="cycle-track-fill" id="cycle-track-fill"></div>
       </div>
     </div>
-
-    <div id="trade-summary-card"><span class="trade-icon">✓</span><span id="trade-summary-text"></span></div>
   </div>
 
   <div class="main-layout">
@@ -535,8 +559,6 @@
               </div>
             </div>
           </div>
-
-          <div class="pref-summary" id="pref-summary"></div>
 
         </div>
         <div class="panel-footer">
@@ -664,7 +686,7 @@
           l.style.color = i === v ? color : '';
         });
         rangeEl.value = v;
-        updateSummary();
+        toggleRiskVisibility();
       }
 
       refresh();
@@ -705,8 +727,6 @@
         document.getElementById('reserve-keep-kwh').textContent  = keepKwh;
         document.getElementById('reserve-trade-kwh').textContent = tradeKwh;
       }
-
-      updateSummary();
     }
 
     function toggleRiskVisibility() {
@@ -715,23 +735,6 @@
       document.getElementById('risk-section').style.opacity = isGreen ? '0.45' : '1';
       document.getElementById('risk-section').style.pointerEvents = isGreen ? 'none' : 'auto';
       document.getElementById('risk-green-note').style.display = isGreen ? 'flex' : 'none';
-    }
-
-    function updateSummary() {
-      toggleRiskVisibility();
-      const p = PREF_STEPS[prefValue].label;
-      const b = BORDER_STEPS[borderValue].label;
-      const scopeIcon = borderValue === 0 ? '🏘️' : borderValue === 1 ? '🇪🇺' : '🌍';
-      let html = `Strategy: <span>${p === 'Green' ? '🌱 Green' : '💰 Profit'}</span>`;
-      html += ` · <span>${scopeIcon} ${b}</span>`;
-      if (prefValue !== 1) {
-        html += ` · <span>⚖️ ${RISK_STEPS[riskValue].label} risk</span>`;
-      }
-      if (document.getElementById('battery-reserve-section').style.display === 'block') {
-        const trade = 100 - batteryReserve;
-        html += ` · <span>🔋 Keep ${batteryReserve}% · Trade ${trade}%</span>`;
-      }
-      document.getElementById('pref-summary').innerHTML = html;
     }
 
     function initSliders() {
@@ -781,33 +784,19 @@
           refreshReserve();
         }
 
-        // Battery and solar cards only make sense if the profile actually has them.
+        // Solar chart only if the profile has panels; battery SoC group only
+        // if it has a battery. Trade summary always shows.
         const hasBattery = !!d.home_battery;
         const hasSolar   = !!d.solar_panels;
-        document.getElementById('battery-card').style.display = hasBattery ? 'flex' : 'none';
-        document.getElementById('solar-card').style.display   = hasSolar   ? 'flex' : 'none';
-        applyDashboardRowLayout(hasBattery, hasSolar);
+        document.getElementById('battery-soc-group').style.display = hasBattery ? 'block' : 'none';
+        document.getElementById('solar-card').style.display = hasSolar ? 'flex' : 'none';
       }
       catch(e) {
         document.getElementById('battery-reserve-section').style.display = 'block';
         refreshReserve();
-        // Profile fetch failed — can't tell if this household has battery/solar,
-        // so hide both rather than guess.
-        document.getElementById('battery-card').style.display = 'none';
+        document.getElementById('battery-soc-group').style.display = 'none';
         document.getElementById('solar-card').style.display = 'none';
-        applyDashboardRowLayout(false, false);
       }
-    }
-
-    // Lets the surviving card take the full row width when only one applies,
-    // and hides the row entirely when neither does.
-    function applyDashboardRowLayout(hasBattery, hasSolar) {
-      const row = document.getElementById('dashboard-row');
-      const batteryCard = document.getElementById('battery-card');
-      const solarCard = document.getElementById('solar-card');
-      batteryCard.style.gridColumn = (hasBattery && !hasSolar) ? '1 / -1' : 'auto';
-      solarCard.style.gridColumn   = (hasSolar && !hasBattery) ? '1 / -1' : 'auto';
-      row.style.display = (hasBattery || hasSolar) ? 'grid' : 'none';
     }
 
     function setBadge(id, val) {
@@ -817,7 +806,7 @@
       el.textContent = val ? 'Yes' : 'No';
     }
 
-        // ── CYCLE STEPPER ──
+    // ── CYCLE STEPPER ──
     // PipelineStatus is shared between bidding and clearing and resets on
     // each run, so we infer the overall phase from which step-name-shape
     // (bidding vs clearing) the snapshot currently shows.
@@ -833,7 +822,7 @@
         steps: ['retrieve_clearing_info','publish_battery_schedule'] },
     ];
 
-    let CURRENT_PHASE = -1;      // -1 = nothing started yet
+    let CURRENT_PHASE = -1;
     let CYCLE_STATUS_TEXT = 'Waiting for market to open';
 
     function computeCyclePhase(snapshot) {
@@ -851,7 +840,6 @@
         return { phase: 3, text: snapshot.current ? `Clearing — ${snapshot.current}` : 'Clearing…' };
       }
 
-      // Bidding-shaped snapshot.
       if (snapshot.status === 'done') {
         return { phase: 2, text: 'Bid submitted — waiting for clearing' };
       }
@@ -917,7 +905,7 @@
 
     function startCycleStatusPolling() {
       pollCycleStatus();
-      setInterval(pollCycleStatus, 5000);   // snappier than the other polls
+      setInterval(pollCycleStatus, 5000);
     }
 
     // ── SOLAR/DEMAND 7-DAY CHART ──
@@ -925,13 +913,10 @@
     let DEMAND_KWH = [];
     let SOLAR_KWH  = [];
 
-    let lastEnergyWeekPeriod = null;
-
     async function fetchEnergyWeek() {
       try {
         const res = await fetch('/prosumer/energy-week');
         const d = await res.json();
-        const periodKey = `${d.period_start}|${d.period_end}`;
 
         CHART_DAYS = d.days || [];
         DEMAND_KWH = d.demand_kwh || [];
@@ -943,8 +928,6 @@
         } else {
           rangeEl.textContent = 'previous 7 days';
         }
-
-        lastEnergyWeekPeriod = periodKey;
       } catch (e) {
         CHART_DAYS = []; DEMAND_KWH = []; SOLAR_KWH = [];
       }
@@ -952,8 +935,8 @@
     }
 
     function startEnergyWeekPolling() {
-      fetchEnergyWeek();                        // first check immediately
-      setInterval(fetchEnergyWeek, 15000);       // then every 15s
+      fetchEnergyWeek();
+      setInterval(fetchEnergyWeek, 15000);
     }
 
     function renderSolarChart() {
@@ -964,7 +947,6 @@
       const maxVal = Math.max(...DEMAND_KWH, ...SOLAR_KWH) * 1.1;
       const groupW = (W - padSide * 2) / CHART_DAYS.length;
       const barW = groupW * 0.32;
-      
 
       let svgContent = '';
       CHART_DAYS.forEach((day, i) => {
@@ -980,7 +962,7 @@
       svg.innerHTML = svgContent;
     }
 
-    // ── TRADE SUMMARY ── (real fetch, dummy fallback stays hidden)
+    // ── TRADE SUMMARY ──
     let lastTradeSummaryJSON = null;
 
     async function checkTradeSummary() {
@@ -989,21 +971,24 @@
         const d = await res.json();
         const json = JSON.stringify(d);
 
-        // Render the card regardless (handles first load too).
-        const card = document.getElementById('trade-summary-card');
-        if (!d.traded) {
-          card.style.display = 'none';
-        } else {
-          const roleWord = d.role === 'seller' ? 'Sold' : 'Bought';
-          let text = `<strong>${roleWord} ${d.volume_kwh} kWh</strong>`;
-          if (d.clearing_price_per_kwh != null) text += ` at €${d.clearing_price_per_kwh}/kWh`;
-          if (d.battery_kept_pct != null) text += ` · Battery kept: ${d.battery_kept_pct}%`;
-          document.getElementById('trade-summary-text').innerHTML = text;
-          card.style.display = 'flex';
-        }
+        const roleWord = d.traded ? (d.role === 'seller' ? 'sold' : 'bought') : 'no trade last week';
+        document.getElementById('trade-summary-role').textContent =
+          d.traded ? `Trading — ${roleWord}` : 'Trading — no trade last week';
 
-        // If this differs from what we last saw, a new cycle completed —
-        // the "previous 7 days" window has shifted, so refresh the chart too.
+        document.getElementById('trade-stat-volume').textContent =
+          d.traded ? `${d.volume_kwh} kWh` : '0 kWh';
+        document.getElementById('trade-stat-total').textContent =
+          (d.traded && d.clearing_price_per_kwh != null)
+            ? `€${(d.volume_kwh * d.clearing_price_per_kwh).toFixed(2)}`
+            : '€0.00';
+
+        document.getElementById('battery-kept-sub').textContent =
+          (d.traded && d.battery_kept_pct != null) ? `Battery kept: ${d.battery_kept_pct}%` : '';
+
+        const cum = d.cumulative || { volume_kwh: 0, total_eur: 0 };
+        document.getElementById('trade-stat-cum-volume').textContent = `${cum.volume_kwh.toFixed(1)} kWh`;
+        document.getElementById('trade-stat-cum-total').textContent = `€${cum.total_eur.toFixed(2)}`;
+
         if (lastTradeSummaryJSON !== null && json !== lastTradeSummaryJSON) {
           fetchEnergyWeek();
         }
@@ -1012,8 +997,8 @@
     }
 
     function startTradeSummaryPolling() {
-      checkTradeSummary();                       // first check immediately
-      setInterval(checkTradeSummary, 20000);      // then every 20s
+      checkTradeSummary();
+      setInterval(checkTradeSummary, 20000);
     }
 
     // ── SAVE ──

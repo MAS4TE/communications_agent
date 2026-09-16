@@ -107,7 +107,7 @@ def retrieve_clearing_info(ctx: MarketContext):
 
     accepted = [o for o in orderbook if abs(o.get("accepted_volume", 0)) > 0]
     accepted_volume = sum(abs(o["accepted_volume"]) for o in accepted)
-    clearing_price = orderbook[0]["accepted_price"] if orderbook else None
+    clearing_price = accepted[0]["accepted_price"] if accepted else None
 
     ctx.data["accepted_volume_kwh"] = accepted_volume
     ctx.log(
