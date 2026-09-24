@@ -61,7 +61,8 @@ def get_preferences(request: Request):
 
 @router.get("/prosumer/last-trade-summary")
 def last_trade_summary(request: Request):
-    return get_agent(request).last_trade_summary
+    agent = get_agent(request)
+    return {**agent.last_trade_summary, "cumulative": agent.cumulative_totals}
 
 
 @router.post("/prosumer/preferences")

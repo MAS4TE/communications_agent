@@ -29,6 +29,7 @@ from market.clearing import run_clearing
 from market.mqtt import BatteryClient, MarketClient
 from market.pipeline import PipelineStatus
 from prosumer import DEFAULT_PREFERENCES, load_profile
+from collections import deque
 
 log = logging.getLogger("agent")
 
@@ -45,19 +46,18 @@ class Agent:
         # Chat brain.
         self.llm = build_llm()
         self.chat_tools = build_chat_tools(self)
-        self.chat_history = [{
-            "role": "system",
-            "content": build_system_message(self.profile, self.preferences),
-        }]
+        self.chat_history = []
 
         # Pipeline memory.
         self.pipeline_status = PipelineStatus()
         self.bid_counter = 0
         self.last_bidding_data: dict = {}
         self.last_bid_trace: list = []
-        self.clearing_traces: list = []
+        self.bid_history: deque = deque(maxlen=4)
+        self.clearing_traces: deque = deque(maxlen=4)
         self.last_trade_summary: dict = {"traded": False}
         self.last_window: dict | None = None
+        self.cumulative_totals: dict = {"volume_kwh": 0.0, "total_eur": 0.0}
 
         # Market link and the one worker that runs pipelines.
         self.market_client = MarketClient(self)
@@ -109,7 +109,12 @@ class Agent:
     # -- chat --------------------------------------------------------------
     def chat(self, message: str, preferences: dict | None = None) -> str:
         """Answer one chat message, keeping conversation history."""
-        prefs = preferences or self.preferences
+        prefs = self.preferences   # always the saved state, regardless of what's live in the UI
+
+        system_message = {
+            "role": "system",
+            "content": build_system_message(self.profile, prefs),
+        }
 
         if self.profile.get("home_battery"):
             role_context = (
@@ -124,7 +129,6 @@ class Agent:
                 "battery. Never mention battery_tradeable_pct or battery scheduling to them."
             )
 
-        # A fresh system note so the assistant always uses the latest preferences.
         fresh_context = {
             "role": "system",
             "content": (
@@ -137,7 +141,7 @@ class Agent:
         }
 
         self.chat_history.append({"role": "user", "content": message})
-        messages = self.chat_history[:-1] + [fresh_context, self.chat_history[-1]]
+        messages = [system_message] + self.chat_history[1:-1] + [fresh_context, self.chat_history[-1]]
         reply = self.llm.invoke(messages, self.chat_tools)
         self.chat_history.append({"role": "assistant", "content": reply})
         return reply

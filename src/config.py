@@ -117,7 +117,7 @@ DRY_RUN = _env_flag("MAS4TE_DRY_RUN", False)
 # MQTT
 # --------------------------------------------------------------------------
 # ONLINE = talk to the real Jülich broker (TLS); offline = local broker.
-MQTT_ONLINE = _env_flag("MQTT_ONLINE", False)
+MQTT_ONLINE = _env_flag("MQTT_ONLINE", True)
 
 # Local broker — used for ASSUME (always) and for the battery when offline.
 MQTT_LOCAL_BROKER = os.environ.get("MQTT_LOCAL_BROKER", "localhost")

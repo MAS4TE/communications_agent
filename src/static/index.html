@@ -942,15 +942,25 @@
     function renderSolarChart() {
       const svg = document.getElementById('solar-chart-svg');
       if (CHART_DAYS.length === 0) { svg.innerHTML = ''; return; }
-      const W = 560, H = 120, padTop = 10, padBottom = 24, padSide = 8;
+      const W = 560, H = 120, padTop = 10, padBottom = 24, padSide = 8, padLeft = 44;
       const chartH = H - padTop - padBottom;
       const maxVal = Math.max(...DEMAND_KWH, ...SOLAR_KWH) * 1.1;
-      const groupW = (W - padSide * 2) / CHART_DAYS.length;
+      const groupW = (W - padLeft - padSide) / CHART_DAYS.length;
       const barW = groupW * 0.32;
 
       let svgContent = '';
+
+      // Y-axis gridlines and labels
+      const ticks = [0, maxVal / 2, maxVal];
+      ticks.forEach(t => {
+        const y = padTop + chartH - (t / maxVal) * chartH;
+        svgContent += `<line x1="${padLeft}" y1="${y}" x2="${W - padSide}" y2="${y}" stroke="#262e29" stroke-width="1"/>`;
+        svgContent += `<text x="2" y="${y - 3}" font-size="9" fill="#5b6560" font-family="DM Sans, sans-serif">${t.toFixed(1)} kWh</text>`;
+      });
+
+      // Bars and day labels
       CHART_DAYS.forEach((day, i) => {
-        const groupX = padSide + i * groupW + groupW / 2;
+        const groupX = padLeft + i * groupW + groupW / 2;
         const demandH = (DEMAND_KWH[i] / maxVal) * chartH;
         const solarH  = (SOLAR_KWH[i]  / maxVal) * chartH;
 
@@ -961,7 +971,6 @@
 
       svg.innerHTML = svgContent;
     }
-
     // ── TRADE SUMMARY ──
     let lastTradeSummaryJSON = null;
 

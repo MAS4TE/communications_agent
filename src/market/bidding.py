@@ -486,9 +486,11 @@ def run_bidding(agent, market_data: dict) -> MarketContext:
     """Run the full bidding pipeline for one market-open event."""
     ctx = MarketContext(agent=agent, market_data=market_data)
     run_pipeline(ctx, BIDDING_STEPS, agent.pipeline_status, name="bidding")
-    # Remember this run so clearing can reuse the forecasts and schedules, and
-    # so the chat assistant can explain the bid.
-    agent.last_bidding_data = ctx.data
-    agent.last_bid_trace = ctx.trace
-    agent.last_bid_summary = build_bid_summary(ctx)
+    # Remember this run (last 4) so clearing can reuse the forecasts and
+    # schedules, and so the chat assistant can explain recent bids.
+    agent.bid_history.append({
+        "data": ctx.data,
+        "trace": ctx.trace,
+        "summary": build_bid_summary(ctx),
+    })
     return ctx

@@ -80,7 +80,8 @@ def build_trade_summary(ctx: MarketContext) -> dict:
     is_seller = ctx.data.get("storage_size_kwh", 0) > 0
     orderbook = ctx.market_data.get("orderbook", [])
     accepted = [o for o in orderbook if abs(o.get("accepted_volume", 0)) > 0]
-    clearing_price = orderbook[0]["accepted_price"] if orderbook else None
+    # clearing_price = orderbook[0]["accepted_price"] if orderbook else None
+    clearing_price = accepted[0]["accepted_price"] if accepted else None
 
     battery_kept_pct = None
     if is_seller:
@@ -208,9 +209,15 @@ CLEARING_STEPS = [
 def run_clearing(agent, market_data: dict) -> MarketContext:
     """Run the full clearing pipeline for one market-result event."""
     # Start from the matching bidding run, so the forecasts are already there.
-    ctx = MarketContext(agent=agent, market_data=market_data, data=dict(agent.last_bidding_data))
+    ctx = MarketContext(agent=agent, market_data=market_data, data=dict(agent.bid_history[-1]["data"]))
     run_pipeline(ctx, CLEARING_STEPS, agent.pipeline_status, name="clearing")
     agent.clearing_traces.append(ctx.trace)
-    agent.last_trade_summary = build_trade_summary(ctx)   # add this
-    log.info("trade summary: %s", agent.last_trade_summary)   # temporary, remove once confirmed
+    agent.last_trade_summary = build_trade_summary(ctx)
+
+    if agent.last_trade_summary.get("traded"):
+        agent.cumulative_totals["volume_kwh"] += agent.last_trade_summary["volume_kwh"]
+        price = agent.last_trade_summary.get("clearing_price_per_kwh")
+        if price is not None:
+            agent.cumulative_totals["total_eur"] += agent.last_trade_summary["volume_kwh"] * price
+
     return ctx

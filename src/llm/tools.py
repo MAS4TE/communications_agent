@@ -64,10 +64,22 @@ def build_chat_tools(agent) -> list[Tool]:
     def get_onboarding_info() -> str:
         return ONBOARDING_TEXT
 
-    def explain_pipeline(pipeline: str = "bid") -> str:
-        trace = agent.last_bid_trace if pipeline == "bid" else agent.clearing_traces
-        if not trace:
+    def explain_pipeline(pipeline: str = "bid", weeks_ago: int = 0) -> str:
+        """weeks_ago: 0 = most recent, 1 = one week before that, up to 3 (max 4 stored)."""
+        history = agent.bid_history if pipeline == "bid" else agent.clearing_traces
+
+        if not history:
             return "The pipeline hasn't run yet, so there is nothing to explain."
+
+        index = -1 - weeks_ago
+        if abs(index) > len(history):
+            return (
+                f"Only {len(history)} trading round(s) are available to look back on "
+                f"— that request goes further back than what's stored."
+            )
+
+        entry = history[index]
+        trace = entry["trace"] if pipeline == "bid" else entry
         return json.dumps(trace, indent=2, default=str)
 
     return [
@@ -92,14 +104,20 @@ def build_chat_tools(agent) -> list[Tool]:
         )),
         Tool(explain_pipeline, _schema(
             "explain_pipeline",
-            "Returns what the energy trading pipeline did, so you can explain how the bid "
+            "Returns what the energy trading pipeline did, so you can explain how a bid "
             "was made or what happened during market clearing. Call this whenever the user "
-            "asks what the system did on their behalf.",
+            "asks what the system did on their behalf, including questions about past "
+            "trading rounds (e.g. 'last week', 'two weeks ago').",
             properties={
                 "pipeline": {
                     "type": "string",
                     "enum": ["bid", "clearing"],
                     "description": "'bid' for the bidding pipeline, 'clearing' for market clearing.",
+                },
+                "weeks_ago": {
+                    "type": "integer",
+                    "description": "How many trading rounds back to look. 0 = most recent (default), "
+                                    "1 = the round before that, up to 3. Only the last 4 rounds are stored.",
                 },
             },
             required=["pipeline"],

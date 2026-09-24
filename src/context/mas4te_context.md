@@ -47,8 +47,32 @@ Controls how the assistant communicates:
 - **Intermediate**: some technical terms, assumes basic energy knowledge
 - **Expert**: precise and technical, full numbers and details
 
+### Trading Scope
+Controls which community members a prosumer is willing to trade with:
+- **Community**: only trade with members of their local community
+- **Country**: trade with anyone within the same country
+- **All**: trade with anyone on the platform, regardless of location
+
+### Risk Tolerance
+Controls the trade-off between price and the chance a bid gets accepted. The direction depends on whether the prosumer is a buyer or a seller:
+
+**For buyers:**
+- **Low**: bids more conservatively (lower price) — lower chance of overpaying, but higher chance the bid isn't accepted
+- **Medium**: balances the two
+- **High**: bids more aggressively (higher price) — higher chance of getting accepted, but higher chance of paying more than necessary
+
+**For sellers:**
+- **Low**: asks a lower (more competitive) price — higher chance the offer gets accepted, but less profit if it does
+- **Medium**: balances the two
+- **High**: asks a higher price — more profit if accepted, but lower chance of being accepted
+
+Only applies when trading preference is Profit. Not used with Green, since Green optimizes for renewable energy use rather than price.
+
 ### Clearing Price
 The single price at which all accepted bids trade. Buyers always pay the clearing price, even if they bid higher — so buyers often pay less than they offered.
+
+### Prices
+All prices in the data (bid prices, clearing prices) are in EUR per kWh, e.g. a value of 1.684 means €1.684/kWh. Always report prices in EUR/kWh exactly as given — never convert to cents or any other unit, and never do the conversion yourself.
 
 ### Demand Forecast
 A prediction of how much electricity the prosumer will use during the trading window, based on historical usage patterns. Used by the BUC to decide how much storage is worth renting.
