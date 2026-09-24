@@ -59,6 +59,7 @@ def prosumer_profile(request: Request):
 def get_preferences(request: Request):
     return get_agent(request).preferences
 
+
 @router.get("/prosumer/last-trade-summary")
 def last_trade_summary(request: Request):
     agent = get_agent(request)

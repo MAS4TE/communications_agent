@@ -40,4 +40,5 @@ log.info("ready profile=%s port=see launcher", agent.profile_id)
 app = FastAPI(title="MAS4TE Communication Agent", version="0.1.0")
 app.state.agent = agent
 app.mount("/static", StaticFiles(directory=config.STATIC_DIR), name="static")
+
 app.include_router(router)
