@@ -1,21 +1,21 @@
 // ── SLIDER DATA ──
 const PREF_STEPS = [
-  { label: 'Profit', color: '#4a90e2' },
+  { label: 'Profit', color: '#eef1f0' },
   { label: 'Green',  color: '#39e07a' },
 ];
 const EXPERTISE_STEPS = [
-  { label: 'Beginner',     color: '#39e07a' },
-  { label: 'Intermediate', color: '#f5a623' },
-  { label: 'Expert',       color: '#4a90e2' },
+  { label: 'Beginner',     color: '#7ceaa3' },
+  { label: 'Intermediate', color: '#39e07a' },
+  { label: 'Expert',       color: '#1f8f52' },
 ];
 const BORDER_STEPS = [
-  { label: 'Community', color: '#39e07a' },
-  { label: 'Country',   color: '#f5a623' },
-  { label: 'All',       color: '#4a90e2' },
+  { label: 'Community', color: '#7ceaa3' },
+  { label: 'Country',   color: '#39e07a' },
+  { label: 'All',       color: '#1f8f52' },
 ];
 const RISK_STEPS = [
-  { label: 'Low',     color: '#4a90e2' },
-  { label: 'Medium',  color: '#f5a623' },
+  { label: 'Low',     color: '#eef1f0' },
+  { label: 'Medium',  color: '#39e07a' },
   { label: 'High',    color: '#ef4444' },
 ];
 
@@ -376,8 +376,8 @@ function renderSolarChart() {
     const demandH = (DEMAND_KWH[i] / maxVal) * chartH;
     const solarH  = (SOLAR_KWH[i]  / maxVal) * chartH;
 
-    svgContent += `<rect x="${groupX - barW - 3}" y="${padTop + chartH - demandH}" width="${barW}" height="${demandH}" fill="#4a90e2" rx="2"/>`;
-    svgContent += `<rect x="${groupX + 3}" y="${padTop + chartH - solarH}" width="${barW}" height="${solarH}" fill="#f5a623" rx="2"/>`;
+    svgContent += `<rect x="${groupX - barW - 3}" y="${padTop + chartH - demandH}" width="${barW}" height="${demandH}" fill="#eef1f0" rx="2"/>`;
+    svgContent += `<rect x="${groupX + 3}" y="${padTop + chartH - solarH}" width="${barW}" height="${solarH}" fill="#39e07a" rx="2"/>`;
     svgContent += `<text x="${groupX}" y="${H - 6}" text-anchor="middle" font-size="11" fill="#5b6560" font-family="DM Sans, sans-serif">${day}</text>`;
   });
 
