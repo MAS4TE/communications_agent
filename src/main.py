@@ -33,7 +33,8 @@ log = logging.getLogger("agent")
 config.load_api_keys()
 enable_if_requested()               # BUC_DEBUG=1 traces every optimiser solve
 
-agent = Agent(profile_id=config.PROFILE_ID, agent_id=config.AGENT_ID)
+agent = Agent(profile_id=config.PROFILE_ID, agent_id=config.AGENT_ID,
+              battery_id=config.BATTERY_ID, blockchain_address=config.BLOCKCHAIN_ADDRESS)
 agent.start()
 log.info("ready profile=%s port=see launcher", agent.profile_id)
 

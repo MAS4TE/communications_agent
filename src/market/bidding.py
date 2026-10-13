@@ -84,8 +84,9 @@ def _cached_forecast(cache_path, csv_path, value_col, start, end) -> pd.Series:
             cached.index = cached.index.tz_localize(None)
 
         already_covered = cached[(cached.index >= start) & (cached.index < end)]
-        if len(already_covered) > 0:
-            return already_covered          # this window is already cached
+        expected = len(pd.date_range(start, end, freq="15min", inclusive="left"))
+        if len(already_covered) >= expected:
+            return already_covered          # window fully cached
 
     # This window is missing -- ask Chronos for just this window.
     fresh = chronos_forecast(str(csv_path), start, end, value_col=value_col)
@@ -257,9 +258,6 @@ def forecast_prices(ctx: MarketContext):
             DATA_DIR / f"prices_{country}_{col}_forecasted.csv",
             prices_csv, col, window["start"], window["end"],
         )
-        print(DATA_DIR / f"prices_{country}_{col}_forecasted.csv")
-        print(col)
-        print(prices[col])
     ctx.data["prices_fc"] = prices
     ctx.log("forecast_prices", f"Forecast {len(price_columns)} energy price streams for {country}.",
             {"columns": price_columns, "country": country})
@@ -329,6 +327,10 @@ def battery_utility(ctx: MarketContext):
     series = forecast_inputs(ctx)
     community = series.pop("community")
     charge_series = {}
+
+    log.info("BUC inputs: %s | %s | %s", _summarise("demand", series["demand"]),
+         _summarise("solar", series["solar_generation"]),
+         _summarise("community", community))
 
     if is_buyer:
         max_volume = ctx.data.get("max_volume", 10)
@@ -446,6 +448,7 @@ def make_orderbook(ctx: MarketContext):
             "price": row["marginal_price_per_kwh"],
             "location": location,
             "exclusive_id": row.get("exclusive_id"),
+            "blockchain_address": str(ctx.agent.blockchain_address),
         })
 
     ctx.data["orderbook"] = orderbook

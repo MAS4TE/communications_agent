@@ -21,6 +21,7 @@ class AgentSpec:
     profile_id: int
     agent_id: str
     port: int
+    blockchain_address: str | None =None 
 
     @property
     def is_seller(self) -> bool:
@@ -62,7 +63,8 @@ def load_agents(config_file: Path = CONFIG_FILE) -> list[AgentSpec]:
         raise ValueError(f"{config_file} lists no agents.")
 
     agents = [
-        AgentSpec(int(e["profile_id"]), str(e["agent_id"]), int(e["port"]))
+        AgentSpec(int(e["profile_id"]), str(e["agent_id"]), int(e["port"]),
+                  e.get("blockchain_address"))
         for e in entries
     ]
 

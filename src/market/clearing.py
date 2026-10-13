@@ -29,16 +29,20 @@ log = logging.getLogger("clearing")
 # --------------------------------------------------------------------------
 # Helpers
 # --------------------------------------------------------------------------
-def soc_to_power_request(soc: pd.DataFrame) -> dict:
-    """Turn a state-of-charge schedule into a battery power request.
+# def soc_to_power_request(soc: pd.DataFrame) -> dict:
+#     """Turn a state-of-charge schedule into a battery power request.
 
-    Sums the SOC across sources, then differentiates to get power (W) per step.
-    """
+#     Sums the SOC across sources, then differentiates to get power (W) per step.
+#     """
+#     total_soc = soc.sum(axis=1)
+#     power_kw = (total_soc.diff() / 0.25).fillna(0)        # 0.25 h per step
+#     seconds = (total_soc.index - total_soc.index[0]).total_seconds().astype(int)
+#     return {"time_steps": seconds.tolist(), "power_rate_w": (power_kw * 1000).tolist()}
+
+def soc_to_power_series(soc: pd.DataFrame) -> pd.Series:
+    """SOC (kWh) over alle bronnen -> vermogen in W per stap, datetime-index."""
     total_soc = soc.sum(axis=1)
-    power_kw = (total_soc.diff() / 0.25).fillna(0)        # 0.25 h per step
-    seconds = (total_soc.index - total_soc.index[0]).total_seconds().astype(int)
-    return {"time_steps": seconds.tolist(), "power_rate_w": (power_kw * 1000).tolist()}
-
+    return (total_soc.diff() / 0.25).fillna(0) * 1000
 
 def charge_schedule_for(ctx: MarketContext, volume: float) -> pd.DataFrame | None:
     """The SOC schedule for one volume — from the bidding run, or recomputed.
@@ -48,6 +52,7 @@ def charge_schedule_for(ctx: MarketContext, volume: float) -> pd.DataFrame | Non
     charge timeseries, so their schedule is optimised again here, once, for the
     volume the market actually accepted.
     """
+
     cached = ctx.data.get("buc_charge_series", {}).get(volume)
     if cached is not None:
         return cached
@@ -101,9 +106,7 @@ def build_trade_summary(ctx: MarketContext) -> dict:
 # Steps
 # --------------------------------------------------------------------------
 def retrieve_clearing_info(ctx: MarketContext):
-    log.info("clearing raw market_data keys: %s", list(ctx.market_data.keys()))  # temporary
     orderbook = ctx.market_data.get("orderbook", [])
-    log.info("clearing raw orderbook (%d orders): %s", len(orderbook), orderbook[:3])   # add this line
     role = "seller" if ctx.data.get("storage_size_kwh", 0) > 0 else "buyer"
 
     accepted = [o for o in orderbook if abs(o.get("accepted_volume", 0)) > 0]
@@ -144,7 +147,7 @@ def _publish_buyer_schedule(ctx: MarketContext):
         return
 
     payload = {
-        "request_id": ctx.agent.agent_id,
+        "blockchain_address": ctx.agent.blockchain_address,
         "time_steps": soc.index.astype(str).tolist(),
         "eeg": soc["soc_eeg"].tolist(),
         "wholesale": soc["soc_wholesale"].tolist(),
@@ -167,6 +170,7 @@ def _publish_buyer_schedule(ctx: MarketContext):
         timeout=60,
     )
     log.info("POST %s -> %s", POWER_REQUEST_URL, response.status_code)
+    log.info(response.json())
 
     ctx.log("publish_battery_schedule", "Sent the rented-storage schedule to the API (buyer).",
             {"role": "buyer", "accepted_volume_kwh": volume, "timesteps": len(payload["time_steps"])})
@@ -177,28 +181,25 @@ def _publish_seller_schedule(ctx: MarketContext):
     total = ctx.data["storage_size_kwh"]
     rented = ctx.data.get("accepted_volume_kwh", 0)
     own_volume = total - rented
+    log.info("seller own schedule: total=%s rented=%s own_volume=%s", total, rented, own_volume)
 
     if own_volume <= 0:
+        ctx.agent.own_power_w = None 
         ctx.log("publish_battery_schedule", "Entire battery rented out — no own-use schedule sent.")
         return
 
     soc = charge_schedule_for(ctx, own_volume)
     if soc is None:
+        ctx.agent.own_power_w = None  
         ctx.log("publish_battery_schedule", "No SOC schedule available — step skipped.")
         return
 
-    power_request = soc_to_power_request(soc)
-    if DRY_RUN:
-        ctx.log("publish_battery_schedule", "Dry run — seller schedule computed but not sent.",
-                {"role": "seller", "own_use_kwh": own_volume,
-                 "timesteps": len(power_request["time_steps"])})
-        return
-    ctx.agent.battery_client.send_power_request(power_request)
-
-    ctx.log("publish_battery_schedule", "Sent own-use battery schedule to the battery via MQTT (seller).",
+    ctx.agent.own_power_w = soc_to_power_series(soc)   # de poller stuurt dit, opgeteld met de buyers
+    p = ctx.agent.own_power_w
+    log.info("seller own power: steps=%d nonzero=%d max_abs_w=%.0f", len(p), (p != 0).sum(), p.abs().max())
+    ctx.log("publish_battery_schedule", "Stored own-use battery schedule; the poller sends it to the battery (seller).",
             {"role": "seller", "total_battery_kwh": total, "rented_out_kwh": rented,
-             "own_use_kwh": own_volume, "timesteps": len(power_request["time_steps"])})
-
+             "own_use_kwh": own_volume, "timesteps": len(ctx.agent.own_power_w)})
 
 CLEARING_STEPS = [
     retrieve_clearing_info,

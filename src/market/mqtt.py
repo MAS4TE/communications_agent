@@ -79,11 +79,13 @@ class MarketClient:
         if message.topic == self.topic_status and payload.get("status") == "market_open":
             products = payload.get("products", [])
             windows = [(p.get("start_time"), p.get("end_time")) for p in products]
+            if windows:
+                self.agent.market_window = windows[0]   # (start, end) as string
             log.info("receive topic=%s dup=%s mid=%s status=market_open", message.topic, message.dup, message.mid)
             log.info("receive topic=%s status=market_open products=%d windows=%s -> queue bidding",
                     message.topic, len(products), windows)
             self.agent.on_market_open(payload)
-        elif message.topic == self.topic_results and payload.get("msg") == "market result":
+        elif message.topic == self.topic_results and (payload.get("msg") or payload.get("message")) in ("market_result", "market result"):
             log.info("receive topic=%s msg=market_result orders=%d -> queue clearing",
                      message.topic, len(payload.get("orderbook", [])))
             self.agent.on_market_result(payload)
@@ -105,14 +107,17 @@ class MarketClient:
 class BatteryClient:
     """Sends power requests to the battery and logs its responses."""
 
-    def __init__(self, agent):
+    def __init__(self, agent, battery_id: str | None = None):
         self.agent = agent
+        self.battery_id = battery_id
         self.topic_power_request = "mas4te/battery-storage/power_request"
-        self.topic_response = f"mas4te/battery-storage/{agent.agent_id}"
+        self.topic_response = f"mas4te/battery-storage/{agent.blockchain_address}"
+        self.topic_result = f"mas4te/battery-storage/{agent.blockchain_address}/result"
 
         self.client = Client(CallbackAPIVersion.VERSION2, client_id=f"agent{agent.agent_id}_battery")
         self.client.on_connect = self._on_connect
         self.client.on_message = self._on_message
+        self.client.on_publish = self._on_publish
 
         username, password = mqtt_battery_credentials()
         if username and password:
@@ -134,18 +139,35 @@ class BatteryClient:
             log.error("broker refused the battery client: %s", reason_code)
             return
         client.subscribe(self.topic_response)
-        log.info("connected role=battery subscribed=%s", self.topic_response)
+        client.subscribe(self.topic_result, qos=1)
+        if self.battery_id:
+            client.subscribe(f"mas4te/battery-storage/{self.battery_id}")
+        log.info("connected role=battery subscribed=%s, %s (+%s)", self.topic_response, self.topic_result, self.battery_id)
+        
+
+    def _on_publish(self, client, userdata, mid, reason_code, properties):
+        log.info("publish CONFIRMED by broker role=battery mid=%s", mid)
 
     def _on_message(self, client, userdata, message):
         log.info("receive topic=%s role=battery payload=%s",
                  message.topic, message.payload.decode()[:200])
+        if message.topic.endswith("/result"):
+            data = json.loads(message.payload)
+            log.info("RESULT keys=%s", list(data.keys()))
+            power = data["actual_power_15min_w"]
+            soc = data["results_soc_percent"]
+            log.info("RESULT power_w: min=%.0f max=%.0f nonzero=%d | soc%%: min=%.1f max=%.1f",
+                     min(power), max(power), sum(1 for p in power if p), min(soc), max(soc))
+
 
     def stop(self):
         self.client.loop_stop()
         self.client.disconnect()
 
     def send_power_request(self, power_request: dict):
-        power_request["request_id"] = self.agent.agent_id
-        info = self.client.publish(self.topic_power_request, json.dumps(power_request))
+        power_request.setdefault("request_id", str(self.agent.agent_id))
+        power_request.setdefault("battery_id", self.battery_id)
+        power_request.setdefault("type", "requested")
+        info = self.client.publish(self.topic_power_request, json.dumps(power_request), qos=1)
         log.info("publish topic=%s role=battery steps=%d queued=%s",
                  self.topic_power_request, len(power_request["time_steps"]), info.rc == 0)

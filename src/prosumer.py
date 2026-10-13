@@ -21,7 +21,8 @@ import pandas as pd
 
 from config import DATA_DIR
 
-PROFILES_CSV = DATA_DIR / "profile_data" / "profiles_usecases10.csv"
+PROFILES_CSV = DATA_DIR / "profile_data" / "profiles_usecases15.csv"
+# PROFILES_CSV = DATA_DIR / "profile_data" / "profiles_usecases10.csv"
 # PROFILES_CSV = DATA_DIR / "profile_data" / "profiles_usecases.csv"
 
 

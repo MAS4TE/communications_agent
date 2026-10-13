@@ -126,7 +126,8 @@ MQTT_LOCAL_PORT = int(os.environ.get("MQTT_LOCAL_PORT", 1883))
 # Live battery broker (only used when MQTT_ONLINE is True).
 MQTT_BATTERY_BROKER = "ese-mqtt.ice.kfa-juelich.de"
 MQTT_BATTERY_PORT = 8883
-BATTERY_ID = "mas4te_1"
+BATTERY_ID = os.environ.get("BATTERY_ID")#"mas4te_1"
+BLOCKCHAIN_ADDRESS = os.environ.get("BLOCKCHAIN_ADDRESS")
 
 # --------------------------------------------------------------------------
 # BRP REST API (where the battery schedule is sent for buyers)

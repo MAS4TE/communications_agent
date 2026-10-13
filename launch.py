@@ -44,6 +44,7 @@ from agents_config import (  # noqa: E402  (needs SRC on the path first)
     load_services,
 )
 
+
 IS_WINDOWS = os.name == "nt"
 AGENT_BOOT_TIMEOUT = 90          # seconds to wait for an agent's web UI
 SHUTDOWN_GRACE = 10              # seconds between SIGTERM and SIGKILL
@@ -434,6 +435,12 @@ def start_agent(agent: AgentSpec, terminal: bool = False, risk_bidding: bool = T
         "MQTT_LOCAL_PORT": str(broker_port),
         "RISK_BIDDING_ENABLED": "true" if risk_bidding else "false",
     }
+    if agent.agent_id.startswith("S_"):
+        env["BATTERY_ID"] = f"battery{int(agent.agent_id.split('_')[1])}"
+
+    if agent.blockchain_address:
+        env["BLOCKCHAIN_ADDRESS"] = agent.blockchain_address
+    
     child = _spawn(agent.agent_id, command, cwd=SRC, env=env, terminal=terminal)
     print(f"START {agent.agent_id:6} profile {agent.profile_id:<4} "
           f"pid {child.process.pid} -> http://localhost:{agent.port}"

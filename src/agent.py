@@ -30,14 +30,18 @@ from market.mqtt import BatteryClient, MarketClient
 from market.pipeline import PipelineStatus
 from prosumer import DEFAULT_PREFERENCES, load_profile
 from collections import deque
+from market.schedule_poller import poll_loop
 
 log = logging.getLogger("agent")
 
 
 class Agent:
-    def __init__(self, profile_id: int, agent_id: str):
+    def __init__(self, profile_id: int, agent_id: str, battery_id: str | None = None,
+                 blockchain_address: str | None = None):
         self.profile_id = profile_id
         self.agent_id = agent_id
+        self.battery_id = battery_id
+        self.blockchain_address = blockchain_address
 
         # Prosumer data.
         self.profile = load_profile(profile_id)
@@ -58,10 +62,12 @@ class Agent:
         self.last_trade_summary: dict = {"traded": False}
         self.last_window: dict | None = None
         self.cumulative_totals: dict = {"volume_kwh": 0.0, "total_eur": 0.0}
+        self.own_power_w = None
+        self.market_window = None # (start, end) of current week
 
         # Market link and the one worker that runs pipelines.
         self.market_client = MarketClient(self)
-        self.battery_client = BatteryClient(self)
+        self.battery_client = BatteryClient(self, battery_id)
         self.jobs: queue.Queue = queue.Queue()
 
     # -- lifecycle ---------------------------------------------------------
@@ -72,6 +78,9 @@ class Agent:
         log.info("worker started profile=%s", self.profile_id)
         self.market_client.start()
         self.battery_client.start()
+        if self.battery_id:      # alleen sellers hebben een batterij
+            threading.Thread(target=poll_loop, args=(self,),
+                             name=f"{self.agent_id}-poller", daemon=True).start()
 
     def _work(self):
         """Run queued pipelines, one at a time, forever."""
