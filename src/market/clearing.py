@@ -231,6 +231,7 @@ def settle_on_chain(ctx: MarketContext):
             seller_address=BLOCKCHAIN_TEST_SELLER_ADDRESS,
         )
         trade_id = tool.pay(trade)
+        log.info("paid trade_id=%s volume=%s price=%s", trade_id, volume, price)
         ctx.log("settle_on_chain", "Paid trade on chain (buyer).",
                 {"trade_id": trade_id, "volume_kwh": volume, "price_eur_kwh": price})
     except Exception as error:

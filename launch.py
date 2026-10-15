@@ -502,6 +502,40 @@ def supervise(children: list[Child]) -> None:
             return
 
 
+def start_chain() -> bool:
+    """Start the Docker test chain and make sure the contract is deployed."""
+    import adapters
+    from web3 import Web3
+    from adapters.web3 import deploy_contract
+    from adapters.web3.local_chain import deterministic_accounts
+    from config import BLOCKCHAIN_CONTRACT_ADDRESS, BLOCKCHAIN_RPC_URL
+
+    repo = Path(list(adapters.__path__)[0]).parent      # blockchain-repo (editable install)
+    try:
+        result = subprocess.run(["docker", "compose", "up", "-d", "--wait"],
+                                cwd=repo, capture_output=True, text=True)
+    except FileNotFoundError:
+        print("  chain NOT started: docker not found on PATH")
+        return False
+    if result.returncode != 0:
+        print("  chain NOT started: is Docker Desktop running?")
+        print(result.stderr.strip()[-300:])
+        return False
+
+    w3 = Web3(Web3.HTTPProvider(BLOCKCHAIN_RPC_URL))
+    address = Web3.to_checksum_address(BLOCKCHAIN_CONTRACT_ADDRESS)
+    if len(w3.eth.get_code(address)) > 0:
+        print(f"  chain up, contract already deployed at {address}")
+        return True
+
+    contract = deploy_contract(w3, deterministic_accounts()[0])
+    if contract.address.lower() != address.lower():
+        print(f"  WARNING: deployed at {contract.address}, config expects {address}")
+        return False
+    print(f"  chain up, contract deployed at {contract.address}")
+    return True
+
+
 # --------------------------------------------------------------------------
 # Entry point
 # --------------------------------------------------------------------------
@@ -548,6 +582,12 @@ def main() -> int:
         # opening; the full roster needs a machine that can take it.
         print(f"\nNOTE: starting {len(agents)} agents ({len(agents)} processes). "
               f"On a small machine use --agents B_01,S_01 instead.")
+
+    if not args.no_blockchain:
+        print("\nBlockchain")
+        if not start_chain():
+            print("Blockchain unavailable. Fix the above, or re-run with --no-blockchain.")
+            return 1
 
     print("\n" + "-" * 70)
     children: list[Child] = []
