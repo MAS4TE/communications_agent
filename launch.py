@@ -420,7 +420,7 @@ def start_service(service: ServiceSpec, terminal: bool = False) -> Child | None:
     return child
 
 
-def start_agent(agent: AgentSpec, terminal: bool = False, risk_bidding: bool = True) -> Child:
+def start_agent(agent: AgentSpec, terminal: bool = False, risk_bidding: bool = True, blockchain: bool = True) -> Child:
     command = [
         sys.executable, "-m", "uvicorn", "main:app",
         "--host", "127.0.0.1", "--port", str(agent.port),
@@ -434,6 +434,7 @@ def start_agent(agent: AgentSpec, terminal: bool = False, risk_bidding: bool = T
         "MQTT_LOCAL_BROKER": broker_host,
         "MQTT_LOCAL_PORT": str(broker_port),
         "RISK_BIDDING_ENABLED": "true" if risk_bidding else "false",
+        "BLOCKCHAIN_ENABLED": "true" if blockchain else "false"
     }
     if agent.agent_id.startswith("S_"):
         env["BATTERY_ID"] = f"battery{int(agent.agent_id.split('_')[1])}"
@@ -520,6 +521,8 @@ def main() -> int:
                         help="start even if the preflight check fails")
     parser.add_argument("--no-risk", action="store_true", 
                         help="disable risk-adjusted bidding for all agents (deterministic BUC only)")
+    parser.add_argument("--no-blockchain", action="store_true",
+                        help="disable on-chain settlement for all agents")
     args = parser.parse_args()
 
     agents = load_agents()
@@ -558,8 +561,9 @@ def main() -> int:
                     children.append(child)
 
         for agent in agents:
-            # children.append(start_agent(agent, terminal=args.terminals))
-            children.append(start_agent(agent, terminal=args.terminals, risk_bidding=not args.no_risk))
+            children.append(start_agent(agent, terminal=args.terminals, 
+                                        risk_bidding=not args.no_risk,
+                                        blockchain=not args.no_blockchain))
 
         print("\nWaiting for the agents to come up...")
         wait_for_agents(agents, children)

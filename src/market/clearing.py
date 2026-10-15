@@ -23,6 +23,10 @@ from config import DRY_RUN, POWER_REQUEST_URL, SOLVER, rest_api_credentials
 from market.bidding import C_RATE, forecast_inputs
 from market.pipeline import MarketContext, run_pipeline
 
+# blockchain imports
+from datetime import datetime
+from config import BLOCKCHAIN_ENABLED, BLOCKCHAIN_TEST_SELLER_ADDRESS
+
 log = logging.getLogger("clearing")
 
 
@@ -114,6 +118,8 @@ def retrieve_clearing_info(ctx: MarketContext):
     clearing_price = accepted[0]["accepted_price"] if accepted else None
 
     ctx.data["accepted_volume_kwh"] = accepted_volume
+    ctx.data["clearing_price_eur_kwh"] = clearing_price
+
     ctx.log(
         "market_clearing",
         "Received the market clearing result.",
@@ -201,9 +207,40 @@ def _publish_seller_schedule(ctx: MarketContext):
             {"role": "seller", "total_battery_kwh": total, "rented_out_kwh": rented,
              "own_use_kwh": own_volume, "timesteps": len(ctx.agent.own_power_w)})
 
+def settle_on_chain(ctx: MarketContext):
+    tool = ctx.agent.contract_tool
+    if not BLOCKCHAIN_ENABLED or DRY_RUN or tool is None:
+        ctx.log("settle_on_chain", "Blockchain off or unavailable — step skipped.")
+        return
+    try:
+        from schemas.cleared_trade import ClearedTrade
+        if ctx.data.get("storage_size_kwh", 0) > 0:          # seller
+            tool.withdraw()
+            ctx.log("settle_on_chain", "Withdrew pending balance (seller).")
+            return
+        volume = ctx.data.get("accepted_volume_kwh", 0)
+        price = ctx.data.get("clearing_price_eur_kwh")
+        if volume == 0 or price is None:
+            ctx.log("settle_on_chain", "No volume accepted — nothing to pay.")
+            return
+        now = datetime.now()
+        trade = ClearedTrade(
+            trade_id=f"{ctx.agent.agent_id}-{int(now.timestamp() * 1000)}",
+            buyer_id=ctx.agent.agent_id, seller_id="S_01",   # TEST: hardcoded
+            volume=volume, price=price, cleared_at=now,
+            seller_address=BLOCKCHAIN_TEST_SELLER_ADDRESS,
+        )
+        trade_id = tool.pay(trade)
+        ctx.log("settle_on_chain", "Paid trade on chain (buyer).",
+                {"trade_id": trade_id, "volume_kwh": volume, "price_eur_kwh": price})
+    except Exception as error:
+        log.exception("settle_on_chain failed")
+        ctx.log("settle_on_chain", f"Settlement failed: {error}")
+
 CLEARING_STEPS = [
     retrieve_clearing_info,
     publish_battery_schedule,
+    settle_on_chain,
 ]
 
 

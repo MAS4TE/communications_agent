@@ -31,6 +31,8 @@ from market.pipeline import PipelineStatus
 from prosumer import DEFAULT_PREFERENCES, load_profile
 from collections import deque
 from market.schedule_poller import poll_loop
+from config import BLOCKCHAIN_ENABLED
+
 
 log = logging.getLogger("agent")
 
@@ -42,6 +44,20 @@ class Agent:
         self.agent_id = agent_id
         self.battery_id = battery_id
         self.blockchain_address = blockchain_address
+
+        if BLOCKCHAIN_ENABLED:
+
+            self.contract_tool = None
+            try:
+                from blockchain import build_contract_tool
+                self.contract_tool = build_contract_tool(agent_id, blockchain_address)
+            except Exception:
+                log.exception("blockchain unavailable — trading continues without settlement")
+
+            try:
+                self.contract_tool = build_contract_tool(agent_id, blockchain_address)
+            except Exception:
+                log.exception("blockchain unavailable — trading continues without settlement")
 
         # Prosumer data.
         self.profile = load_profile(profile_id)

@@ -101,6 +101,7 @@ LLM_CONFIGS = {
 # Variable enabling
 # --------------------------------------------------------------------------
 RISK_BIDDING_ENABLED = os.environ.get("RISK_BIDDING_ENABLED", "true").strip().lower() != "false"
+BLOCKCHAIN_ENABLED = os.environ.get("BLOCKCHAIN_ENABLED", "true").strip().lower() != "false"
 
 # --------------------------------------------------------------------------
 # Optimiser
@@ -126,8 +127,16 @@ MQTT_LOCAL_PORT = int(os.environ.get("MQTT_LOCAL_PORT", 1883))
 # Live battery broker (only used when MQTT_ONLINE is True).
 MQTT_BATTERY_BROKER = "ese-mqtt.ice.kfa-juelich.de"
 MQTT_BATTERY_PORT = 8883
-BATTERY_ID = os.environ.get("BATTERY_ID")#"mas4te_1"
+BATTERY_ID = os.environ.get("BATTERY_ID")#"battery1"
 BLOCKCHAIN_ADDRESS = os.environ.get("BLOCKCHAIN_ADDRESS")
+
+BLOCKCHAIN_RPC_URL = os.environ.get("BLOCKCHAIN_RPC_URL", "http://127.0.0.1:8547")
+BLOCKCHAIN_CONTRACT_ADDRESS = os.environ.get(
+    "BLOCKCHAIN_CONTRACT_ADDRESS", "0xe78A0F7E598Cc8b0Bb87894B0F60dD2a88d6a8Ab")
+BLOCKCHAIN_KEYS_FILE = SRC_DIR / "mas4te_blockchain_keys.yml"
+
+BLOCKCHAIN_TEST_SELLER_ADDRESS = os.environ.get(
+    "BLOCKCHAIN_TEST_SELLER_ADDRESS", "0xE11BA2b4D45Eaed5996Cd0823791E0C93114882d")  # S_01
 
 # --------------------------------------------------------------------------
 # BRP REST API (where the battery schedule is sent for buyers)

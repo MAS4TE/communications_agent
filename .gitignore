@@ -92,7 +92,13 @@ src/data/
 src/mas4tecontroller_mqtt_credentials.yml
 src/mas4te_mistral_api_key.yml
 src/mas4te_restapi_key.yml
+mas4te_blockchain_keys.yml
 
 
 # launcher output
 logs/
+
+src/data_ca.zip
+src/core/db/
+
+logs/Bea-todo.md
