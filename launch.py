@@ -502,8 +502,29 @@ def supervise(children: list[Child]) -> None:
             return
 
 
-def start_chain() -> bool:
+def ensure_docker() -> bool:
+    """Start Docker Desktop if the engine is not running, and wait for it."""
+    def up():
+        try:
+            return subprocess.run(["docker", "info"], capture_output=True).returncode == 0
+        except FileNotFoundError:
+            return False
+
+    if up():
+        return True
+    exe = Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Docker" / "Docker" / "Docker Desktop.exe"
+    if not exe.exists():
+        return False
+    print("  starting Docker Desktop (can take a minute)...")
+    subprocess.Popen([str(exe)])
+    return wait_for(up, timeout=180, interval=3)
+
+def start_chain(fresh: bool = False) -> bool:
     """Start the Docker test chain and make sure the contract is deployed."""
+    if not ensure_docker():
+        print("  chain NOT started: Docker Desktop could not be started")
+        return False
+
     import adapters
     from web3 import Web3
     from adapters.web3 import deploy_contract
@@ -511,6 +532,9 @@ def start_chain() -> bool:
     from config import BLOCKCHAIN_CONTRACT_ADDRESS, BLOCKCHAIN_RPC_URL
 
     repo = Path(list(adapters.__path__)[0]).parent      # blockchain-repo (editable install)
+    if fresh:
+        subprocess.run(["docker", "compose", "down"], cwd=repo, capture_output=True)
+        print("  chain wiped")
     try:
         result = subprocess.run(["docker", "compose", "up", "-d", "--wait"],
                                 cwd=repo, capture_output=True, text=True)
@@ -557,6 +581,8 @@ def main() -> int:
                         help="disable risk-adjusted bidding for all agents (deterministic BUC only)")
     parser.add_argument("--no-blockchain", action="store_true",
                         help="disable on-chain settlement for all agents")
+    parser.add_argument("--fresh-chain", action="store_true",
+                        help="wipe the test chain before starting (all payments gone)")
     args = parser.parse_args()
 
     agents = load_agents()
@@ -585,7 +611,7 @@ def main() -> int:
 
     if not args.no_blockchain:
         print("\nBlockchain")
-        if not start_chain():
+        if not start_chain(fresh=args.fresh_chain):
             print("Blockchain unavailable. Fix the above, or re-run with --no-blockchain.")
             return 1
 
