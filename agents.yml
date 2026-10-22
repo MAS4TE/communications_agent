@@ -8,10 +8,10 @@
 # Buyers (B_*) own no battery, sellers (S_*) do.
 
 agents:
-  - { profile_id: 3,   agent_id: B_01, port: 8002, blockchain_address: "0xFFcf8FDEE72ac11b5c542428B35EEF5769C409f0" }
-  - { profile_id: 152, agent_id: B_02, port: 8003, blockchain_address: "0x22d491Bde2303f2f43325b2108D26f1eAbA1e32b" }
-  - { profile_id: 84,  agent_id: S_01, port: 8012, blockchain_address: "0xE11BA2b4D45Eaed5996Cd0823791E0C93114882d" }
-  - { profile_id: 92,  agent_id: S_02, port: 8013, blockchain_address: "0xd03ea8624C8C5987235048901fB614fDcA89b117" }
+  # - { profile_id: 3,   agent_id: B_01, port: 8002, blockchain_address: "0xFFcf8FDEE72ac11b5c542428B35EEF5769C409f0" }
+  # - { profile_id: 152, agent_id: B_02, port: 8003, blockchain_address: "0x22d491Bde2303f2f43325b2108D26f1eAbA1e32b" }
+  # - { profile_id: 84,  agent_id: S_01, port: 8012, blockchain_address: "0xE11BA2b4D45Eaed5996Cd0823791E0C93114882d" }
+  # - { profile_id: 92,  agent_id: S_02, port: 8013, blockchain_address: "0xd03ea8624C8C5987235048901fB614fDcA89b117" }
   # - { profile_id: 3,   agent_id: B_01, port: 8002 }
   # - { profile_id: 152, agent_id: B_02, port: 8003 }
   # - { profile_id: 9,   agent_id: B_03, port: 8004 }
@@ -19,14 +19,29 @@ agents:
   # - { profile_id: 96,  agent_id: B_05, port: 8006 }
   # - { profile_id: 168, agent_id: B_06, port: 8007 }
   # - { profile_id: 18,  agent_id: B_07, port: 8008 }
-  # - { profile_id: 55,  agent_id: B_08, port: 8009 }
-  # - { profile_id: 40,  agent_id: B_09, port: 8010 }
-  # - { profile_id: 113, agent_id: B_10, port: 8011 }
+  # # - { profile_id: 55,  agent_id: B_08, port: 8009 }
+  # # - { profile_id: 40,  agent_id: B_09, port: 8010 }
+  # # - { profile_id: 113, agent_id: B_10, port: 8011 }
   # - { profile_id: 84,  agent_id: S_01, port: 8012 }
   # - { profile_id: 92,  agent_id: S_02, port: 8013 }
   # - { profile_id: 87,  agent_id: S_03, port: 8014 }
-  # - { profile_id: 63,  agent_id: S_04, port: 8015 }
-  # - { profile_id: 61,  agent_id: S_05, port: 8016 }
+  # # - { profile_id: 63,  agent_id: S_04, port: 8015 }
+  # # - { profile_id: 61,  agent_id: S_05, port: 8016 }
+  - { profile_id: 3,   agent_id: B_01, port: 8002, blockchain_address: "0x0000000000000000000000000000000000000001" }
+  - { profile_id: 152, agent_id: B_02, port: 8003, blockchain_address: "0x0000000000000000000000000000000000000002" }
+  - { profile_id: 9,   agent_id: B_03, port: 8004, blockchain_address: "0x0000000000000000000000000000000000000003" }
+  - { profile_id: 33,  agent_id: B_04, port: 8005, blockchain_address: "0x0000000000000000000000000000000000000004" }
+  - { profile_id: 96,  agent_id: B_05, port: 8006, blockchain_address: "0x0000000000000000000000000000000000000005" }
+  - { profile_id: 168, agent_id: B_06, port: 8007, blockchain_address: "0x0000000000000000000000000000000000000006" }
+  - { profile_id: 18,  agent_id: B_07, port: 8008, blockchain_address: "0x0000000000000000000000000000000000000007" }
+  # - { profile_id: 55,  agent_id: B_08, port: 8009, blockchain_address: "0x0000000000000000000000000000000000000008" }
+  # - { profile_id: 40,  agent_id: B_09, port: 8010, blockchain_address: "0x0000000000000000000000000000000000000009" }
+  # - { profile_id: 113, agent_id: B_10, port: 8011, blockchain_address: "0x0000000000000000000000000000000000000010" }
+  - { profile_id: 84,  agent_id: S_01, port: 8012, blockchain_address: "0x0000000000000000000000000000000000000011" }
+  - { profile_id: 92,  agent_id: S_02, port: 8013, blockchain_address: "0x0000000000000000000000000000000000000012" }
+  - { profile_id: 87,  agent_id: S_03, port: 8014, blockchain_address: "0x0000000000000000000000000000000000000013" }
+  # - { profile_id: 63,  agent_id: S_04, port: 8015, blockchain_address: "0x0000000000000000000000000000000000000014" }
+  # - { profile_id: 61,  agent_id: S_05, port: 8016, blockchain_address: "0x0000000000000000000000000000000000000015" }
 
 # The MQTT broker the agents and ASSUME share.
 broker:
