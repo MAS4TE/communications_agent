@@ -121,6 +121,7 @@ def retrieve_clearing_info(ctx: MarketContext):
     clearing_price = accepted[0]["accepted_price"] if accepted else None
 
     ctx.data["accepted_volume_kwh"] = accepted_volume
+    ctx.data["trade_ids"] = [m["trade_id"] for o in accepted for m in o.get("matches", [])]
     ctx.data["clearing_price_eur_kwh"] = clearing_price
 
     ctx.log(
@@ -234,7 +235,7 @@ def settle_on_chain(ctx: MarketContext):
                     continue
                 now = datetime.now()
                 trade = ClearedTrade(
-                    trade_id=f"{order['bid_id']}-{match['bid_id']}-{int(now.timestamp() * 1000)}",
+                    trade_id=match["trade_id"],#f"{order['bid_id']}-{match['bid_id']}-{int(now.timestamp() * 1000)}",
                     buyer_id=ctx.agent.agent_id, seller_id=address,
                     volume=abs(match["volume"]), price=match["price"],
                     cleared_at=now, seller_address=address,
