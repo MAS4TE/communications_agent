@@ -135,8 +135,8 @@ BLOCKCHAIN_CONTRACT_ADDRESS = os.environ.get(
     "BLOCKCHAIN_CONTRACT_ADDRESS", "0xe78A0F7E598Cc8b0Bb87894B0F60dD2a88d6a8Ab")
 BLOCKCHAIN_KEYS_FILE = SRC_DIR / "mas4te_blockchain_keys.yml"
 
-BLOCKCHAIN_TEST_SELLER_ADDRESS = os.environ.get(
-    "BLOCKCHAIN_TEST_SELLER_ADDRESS", "0xE11BA2b4D45Eaed5996Cd0823791E0C93114882d")  # S_01
+#BLOCKCHAIN_TEST_SELLER_ADDRESS = os.environ.get(
+#    "BLOCKCHAIN_TEST_SELLER_ADDRESS", "0xE11BA2b4D45Eaed5996Cd0823791E0C93114882d")  # S_01
 
 # --------------------------------------------------------------------------
 # BRP REST API (where the battery schedule is sent for buyers)

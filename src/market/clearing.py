@@ -25,7 +25,7 @@ from market.pipeline import MarketContext, run_pipeline
 
 # blockchain imports
 from datetime import datetime
-from config import BLOCKCHAIN_ENABLED, BLOCKCHAIN_TEST_SELLER_ADDRESS
+from config import BLOCKCHAIN_ENABLED
 
 log = logging.getLogger("clearing")
 
@@ -89,6 +89,7 @@ def build_trade_summary(ctx: MarketContext) -> dict:
     is_seller = ctx.data.get("storage_size_kwh", 0) > 0
     orderbook = ctx.market_data.get("orderbook", [])
     accepted = [o for o in orderbook if abs(o.get("accepted_volume", 0)) > 0]
+
     # clearing_price = orderbook[0]["accepted_price"] if orderbook else None
     clearing_price = accepted[0]["accepted_price"] if accepted else None
 
@@ -114,6 +115,8 @@ def retrieve_clearing_info(ctx: MarketContext):
     role = "seller" if ctx.data.get("storage_size_kwh", 0) > 0 else "buyer"
 
     accepted = [o for o in orderbook if abs(o.get("accepted_volume", 0)) > 0]
+    if accepted:
+        log.info("accepted order keys=%s sample=%s", list(accepted[0].keys()), accepted[0])
     accepted_volume = sum(abs(o["accepted_volume"]) for o in accepted)
     clearing_price = accepted[0]["accepted_price"] if accepted else None
 
@@ -213,30 +216,38 @@ def settle_on_chain(ctx: MarketContext):
         ctx.log("settle_on_chain", "Blockchain off or unavailable — step skipped.")
         return
     try:
-        from schemas.cleared_trade import ClearedTrade
         if ctx.data.get("storage_size_kwh", 0) > 0:          # seller
             tool.withdraw()
             ctx.log("settle_on_chain", "Withdrew pending balance (seller).")
             return
-        volume = ctx.data.get("accepted_volume_kwh", 0)
-        price = ctx.data.get("clearing_price_eur_kwh")
-        if volume == 0 or price is None:
-            ctx.log("settle_on_chain", "No volume accepted — nothing to pay.")
-            return
-        now = datetime.now()
-        trade = ClearedTrade(
-            trade_id=f"{ctx.agent.agent_id}-{int(now.timestamp() * 1000)}",
-            buyer_id=ctx.agent.agent_id, seller_id="S_01",   # TEST: hardcoded
-            volume=volume, price=price, cleared_at=now,
-            seller_address=BLOCKCHAIN_TEST_SELLER_ADDRESS,
-        )
-        trade_id = tool.pay(trade)
-        log.info("paid trade_id=%s volume=%s price=%s", trade_id, volume, price)
-        ctx.log("settle_on_chain", "Paid trade on chain (buyer).",
-                {"trade_id": trade_id, "volume_kwh": volume, "price_eur_kwh": price})
+
+        from schemas.cleared_trade import ClearedTrade
+        orderbook = ctx.market_data.get("orderbook", [])
+        paid = 0
+        for order in orderbook:
+            if abs(order.get("accepted_volume", 0)) == 0:
+                continue
+            for match in order.get("matches", []):
+                address = match["blockchain_address"]
+                if int(address, 16) < 10**6:                 # placeholder, nobody can withdraw
+                    log.warning("skip match %s: placeholder address %s", match["bid_id"], address)
+                    continue
+                now = datetime.now()
+                trade = ClearedTrade(
+                    trade_id=f"{order['bid_id']}-{match['bid_id']}-{int(now.timestamp() * 1000)}",
+                    buyer_id=ctx.agent.agent_id, seller_id=address,
+                    volume=abs(match["volume"]), price=match["price"],
+                    cleared_at=now, seller_address=address,
+                )
+                trade_id = tool.pay(trade)
+                log.info("paid trade_id=%s volume=%s price=%s seller=%s",
+                         trade_id, trade.volume, trade.price, address)
+                paid += 1
+        ctx.log("settle_on_chain", f"Paid {paid} matches on chain (buyer).")
     except Exception as error:
         log.exception("settle_on_chain failed")
         ctx.log("settle_on_chain", f"Settlement failed: {error}")
+
 
 CLEARING_STEPS = [
     retrieve_clearing_info,
