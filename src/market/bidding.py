@@ -42,6 +42,12 @@ N_SCENARIOS = 12 # amount of scenarios that the BUC computes
 SCENARIO_SEED = 42 # set an int if you want reproducible runs
 RISK_TOLERANCE_LEVELS = {"Low": 0.05, "Medium": 0.35, "High": 0.50}
 
+# Above this many optimiser runs in one bid, say so. Nothing is capped — it is
+# a warning, because the usual cause is a trading_scope of "All" (four
+# locations) combined with a wide volume range, and only you can decide which
+# of the two to narrow.
+BUSY_SOLVE_COUNT = 50
+
 
 # --------------------------------------------------------------------------
 # Small helpers
@@ -306,6 +312,7 @@ Respond with JSON only — no markdown:
         log.warning("volume reasoning failed (%s) — falling back to max_volume=10", error)
 
     ctx.data["max_volume"] = max_volume
+    log.info("buyer volume search range = 1..%d kWh (%s)", max_volume, reasoning[:120])
     ctx.log("reason_volume_range", "LLM decided the buyer's volume search range.",
             {"max_volume": max_volume, "reasoning": reasoning})
 
@@ -367,6 +374,9 @@ def battery_utility(ctx: MarketContext):
     else:
         volumes = range(1, int(battery_kwh) + 1)
         max_tradeable = int(battery_kwh * preferences.get("battery_tradeable_pct", 50) / 100)
+        log.info("optimising role=seller volumes=1..%d location=%s timesteps=%d "
+                 "-> %d solves", int(battery_kwh), my_location, len(series["demand"]),
+                 len(volumes))
 
         if use_risk:
             scenarios = sample_scenarios(

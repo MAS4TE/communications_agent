@@ -41,6 +41,10 @@ class MarketClient:
         self.topic_status = f"mas4te/market/status_agent{agent.agent_id}"
         self.topic_bids = f"mas4te/bids/agent{agent.agent_id}"
         self.topic_results = f"mas4te/results/agent{agent.agent_id}"
+        # community energy market (CommunityEOM), only active if ASSUME runs it
+        self.topic_energy_status = f"mas4te/community_eom/market/status_agent{agent.agent_id}"
+        self.topic_energy_bids = f"mas4te/community_eom/bids/agent{agent.agent_id}"
+        self.topic_energy_results = f"mas4te/community_eom/results/agent{agent.agent_id}"
 
         self.client = Client(CallbackAPIVersion.VERSION2, client_id=f"agent{agent.agent_id}")
         self.client.on_connect = self._on_connect
@@ -61,7 +65,10 @@ class MarketClient:
             return
         client.subscribe(self.topic_status)
         client.subscribe(self.topic_results)
-        log.info("connected role=market subscribed=%s,%s", self.topic_status, self.topic_results)
+        client.subscribe(self.topic_energy_status)
+        client.subscribe(self.topic_energy_results)
+        log.info("connected role=market subscribed=%s,%s,%s,%s", self.topic_status,
+                 self.topic_results, self.topic_energy_status, self.topic_energy_results)
 
     def _on_disconnect(self, client, userdata, flags, reason_code, properties):
         if reason_code != 0:
@@ -89,6 +96,14 @@ class MarketClient:
             log.info("receive topic=%s msg=market_result orders=%d -> queue clearing",
                      message.topic, len(payload.get("orderbook", [])))
             self.agent.on_market_result(payload)
+        elif message.topic == self.topic_energy_status and payload.get("status") == "market_open":
+            log.info("receive topic=%s status=market_open products=%d -> queue energy bidding",
+                     message.topic, len(payload.get("products", [])))
+            self.agent.on_energy_market_open(payload)
+        elif message.topic == self.topic_energy_results and payload.get("msg") == "market result":
+            log.info("receive topic=%s msg=market_result orders=%d -> queue energy clearing",
+                     message.topic, len(payload.get("orderbook", [])))
+            self.agent.on_energy_market_result(payload)
         else:
             log.debug("receive topic=%s ignored keys=%s",
                       message.topic, sorted(payload)[:6])
@@ -96,6 +111,11 @@ class MarketClient:
     def stop(self):
         self.client.loop_stop()
         self.client.disconnect()
+
+    def send_energy_orderbook(self, orderbook: list):
+        info = self.client.publish(self.topic_energy_bids, json.dumps(orderbook))
+        log.info("publish topic=%s orders=%d queued=%s",
+                 self.topic_energy_bids, len(orderbook), info.rc == 0)
 
     def send_orderbook(self, orderbook: list):
         volume = sum(order["volume"] for order in orderbook)

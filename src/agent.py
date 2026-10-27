@@ -26,6 +26,7 @@ import threading
 from llm import build_chat_tools, build_llm, build_system_message
 from market.bidding import run_bidding
 from market.clearing import run_clearing
+from market.energy_bidding import run_energy_bidding, run_energy_clearing
 from market.mqtt import BatteryClient, MarketClient
 from market.pipeline import PipelineStatus
 from prosumer import DEFAULT_PREFERENCES, load_profile
@@ -68,6 +69,7 @@ class Agent:
         self.bid_counter = 0
         self.last_bidding_data: dict = {}
         self.last_bid_trace: list = []
+        self.last_energy_bid_trace: list = []
         self.bid_history: deque = deque(maxlen=4)
         self.clearing_traces: deque = deque(maxlen=4)
         self.last_trade_summary: dict = {"traded": False}
@@ -115,6 +117,14 @@ class Agent:
     def on_market_result(self, market_data: dict):
         self.jobs.put((run_clearing, market_data))
         log.debug("queued clearing (%d waiting)", self.jobs.qsize())
+
+    def on_energy_market_open(self, market_data: dict):
+        self.jobs.put((run_energy_bidding, market_data))
+        log.debug("queued energy bidding (%d waiting)", self.jobs.qsize())
+
+    def on_energy_market_result(self, market_data: dict):
+        self.jobs.put((run_energy_clearing, market_data))
+        log.debug("queued energy clearing (%d waiting)", self.jobs.qsize())
 
     # -- preferences -------------------------------------------------------
     def update_preferences(self, **changes):

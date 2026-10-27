@@ -19,11 +19,17 @@ Everything here runs on the agent's single worker thread (see agent.py), so
 steps never run concurrently and need no locking.
 """
 import logging
+import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 log = logging.getLogger("pipeline")
+
+# How often to say "this step is still going". A step that outlives this says so
+# instead of leaving you looking at a silent terminal — the optimiser step can
+# legitimately take minutes, and silence looks exactly like a hang.
+HEARTBEAT_SECONDS = 30
 
 
 @dataclass
@@ -94,6 +100,30 @@ class PipelineStatus:
         }
 
 
+class _Heartbeat:
+    """Says "still running" every HEARTBEAT_SECONDS until stopped.
+
+    Without this, a step that takes ten minutes and a step that hangs forever
+    look identical: no output at all.
+    """
+
+    def __init__(self, label: str, started: float):
+        self.label = label
+        self.started = started
+        self.done = threading.Event()
+        self.thread = threading.Thread(target=self._beat, daemon=True,
+                                       name="pipeline-heartbeat")
+        self.thread.start()
+
+    def _beat(self):
+        while not self.done.wait(HEARTBEAT_SECONDS):
+            log.warning("%s still running after %.0fs", self.label,
+                        time.time() - self.started)
+
+    def stop(self):
+        self.done.set()
+
+
 def run_pipeline(ctx: MarketContext, steps: list, status: PipelineStatus,
                  name: str = "pipeline") -> MarketContext:
     """Run the steps in order. Raises whatever a step raises, after recording it."""
@@ -102,19 +132,24 @@ def run_pipeline(ctx: MarketContext, steps: list, status: PipelineStatus,
     started = time.time()
 
     for number, step in enumerate(steps, start=1):
+        label = f"{name} step {number}/{len(steps)} {step.__name__}"
         status.begin(step.__name__)
         step_started = time.time()
+        log.info("%s start", label)
+
+        heartbeat = _Heartbeat(label, step_started)
         try:
             step(ctx)
         except Exception as error:
             status.finish("failed", f"failed in {step.__name__}: {error}")
-            log.error("%s step %d/%d %s FAILED after %.2fs: %s: %s", name, number,
-                      len(steps), step.__name__, time.time() - step_started,
-                      type(error).__name__, error)
+            log.error("%s FAILED after %.2fs: %s: %s", label,
+                      time.time() - step_started, type(error).__name__, error)
             raise
+        finally:
+            heartbeat.stop()
+
         status.finish_step(step.__name__)
-        log.info("%s step %d/%d %s done in %.2fs", name, number, len(steps),
-                 step.__name__, time.time() - step_started)
+        log.info("%s done in %.2fs", label, time.time() - step_started)
 
     status.finish("done")
     log.info("%s done in %.2fs", name, time.time() - started)
