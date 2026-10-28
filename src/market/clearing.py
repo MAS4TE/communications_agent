@@ -180,7 +180,7 @@ def _publish_buyer_schedule(ctx: MarketContext):
         timeout=60,
     )
     log.info("POST %s -> %s", POWER_REQUEST_URL, response.status_code)
-    log.info(response.json())
+    log.info(response.text)
 
     ctx.log("publish_battery_schedule", "Sent the rented-storage schedule to the API (buyer).",
             {"role": "buyer", "accepted_volume_kwh": volume, "timesteps": len(payload["time_steps"])})
